@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+*.mov
+
+# IQ data files (large binary)
+*.iq
+
+# IDE
+.vscode/
+.idea/
+
+# Personal files
+resumefinal.txt

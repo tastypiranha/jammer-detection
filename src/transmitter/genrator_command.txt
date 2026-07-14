@@ -1,0 +1,1 @@
+hackrf_transfer -t bpsk.iq -f 915000000 -s 2000000 -x 30 -a 0

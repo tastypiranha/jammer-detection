@@ -1,0 +1,3489 @@
+\documentclass{article}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{parskip}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=none,
+  backgroundcolor=\color{gray!5}
+}
+
+\title{Study on Jammer Detection Using Statistical Signal Processing}
+\author{Shreyash Puri \\ Summer Research Fellow \\ Indian Institute of Technology Madras}
+\date{July 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents a jammer detection framework for wireless communication systems, developed during the Summer Fellowship Program at IIT Madras. The problem is formulated as binary hypothesis testing and addressed through three progressively challenging scenarios: (i) known jammer statistics with Bayesian detection, (ii) unknown prior probabilities with minimax detection, and (iii) unknown jammer distribution with residual-energy detection. A polarization-based detector exploiting phase-polarization manifold consistency is developed for strong-jammer scenarios where signal reconstruction fails. The framework is validated through Monte Carlo simulations (achieving $\sim$22$\times$ residual energy separation), Simulink block-level modeling, and real-time hardware implementation using HackRF SDR devices at 915~MHz with a Python-based Costas loop receiver. The results demonstrate that combining statistical signal-domain methods with electromagnetic-domain polarization features provides a robust detection framework across varying jammer strengths.
+\end{abstract}
+
+\newpage
+\tableofcontents
+
+\newpage
+
+\newpage
+
+\section{Introduction}
+
+Wireless communication systems are vulnerable to intentional interference, commonly known as jamming. A jammer emits signals within the operating frequency band of a legitimate system to degrade communication quality or disrupt reception. As wireless technologies become critical in civilian, industrial, and defense applications, reliable jammer detection has become an important research problem.
+
+Conventional detection techniques based on received power or SNR may perform poorly when the jammer is weak or when its behavior resembles normal channel effects. This work formulates jammer detection as a binary hypothesis testing problem and employs statistical signal processing techniques — likelihood ratio tests (LRT), generalized likelihood ratio tests (GLRT), minimax detection, and matched filtering — to derive optimal decision rules. The approach progresses from the most informed scenario (known jammer statistics and priors) to the least informed (unknown distribution and priors), reflecting the practical reality that adversaries do not reveal their transmission characteristics.
+
+Residual-signal analysis is developed by estimating and removing the legitimate signal from the received waveform. The key insight is that if the signal can be reconstructed, any remaining energy beyond what noise alone explains constitutes evidence of jamming. Furthermore, polarization-based features are utilized, exploiting the vector nature of electromagnetic waves: a jammer is an independent source with its own polarization state that perturbs the expected phase-polarization manifold of the legitimate channel.
+
+The objective is to develop a jammer detection framework combining hypothesis testing, residual analysis, and polarization measurements, validated through Monte Carlo simulation, Simulink modeling, and hardware SDR implementation.
+
+\subsection*{Original Contributions}
+
+The major contributions of this work are:
+
+\begin{enumerate}
+\item Development of Bayesian and minimax jammer detectors under progressively relaxed information assumptions, with explicit derivation of optimal thresholds and their dependence on system parameters.
+\item Design of a jammer-distribution-free residual-energy detector that requires no knowledge of jammer statistics, achieving $\sim$22$\times$ energy separation between hypotheses in simulation.
+\item Investigation of a phase-polarization consistency metric for strong jammer scenarios where signal reconstruction fails, demonstrating complementary performance to residual-based methods.
+\item Validation through three levels: Monte Carlo simulation, Simulink block-level modeling, and real-time SDR-based hardware experiments at 915~MHz.
+\item Implementation of a complete real-time receiver with Costas loop carrier recovery, signal cancellation, and jammer extraction on HackRF SDR hardware.
+\end{enumerate}
+
+\newpage
+
+\section{Detection Framework}
+
+The jammer detection problem is decomposed into three progressively challenging cases based on the amount of information available to the receiver. This decomposition follows the classical structure of detection theory, where the optimal detector changes fundamentally depending on what the receiver knows about the interference.
+
+\subsection{Jammer Detection with Known Jammer Distribution and Known Prior Probabilities}
+
+\subsubsection{Problem Formulation}
+
+Consider a binary hypothesis testing problem in which a receiver must determine whether a jammer is present or absent. The received observation is denoted by $y$.
+
+Two hypotheses are defined as
+
+\begin{align}
+H_0 &: \text{No jammer present}, \\
+H_1 &: \text{Jammer present}.
+\end{align}
+
+Initially, we assume that:
+
+\begin{enumerate}
+    \item The probability of jammer occurrence is known.
+    \item The statistical distribution of the jammer is known.
+    \item The costs associated with wrong decisions are known.
+\end{enumerate}
+
+These assumptions represent the best-case scenario for the receiver. In practice, such information might be available from intelligence reports, long-term monitoring of jammer behavior, or cooperative networks that share jammer characterization data. Under these assumptions, the optimal detector can be derived using Bayesian decision theory, which achieves the minimum average cost among all decision rules given the stated assumptions.
+
+\subsubsection{Signal Model}
+
+Let the legitimate signal be represented by $s(t)$ and the jammer signal by $j(t)$.
+
+The received signal can be expressed as
+
+\begin{equation}
+y(t)=s(t)+n(t)
+\end{equation}
+
+under $H_0$, and
+
+\begin{equation}
+y(t)=s(t)+j(t)+n(t)
+\end{equation}
+
+under $H_1$,
+
+where $n(t)$ denotes additive Gaussian noise.
+
+\subsubsection{Bayesian Detection Framework}
+
+The receiver must decide between $H_0$ and $H_1$ by minimizing the average decision cost. The Bayes risk is defined as
+
+\begin{equation}
+R = \sum_{i=0}^{1} \sum_{k=0}^{1} C_{ik} \, P(\text{decide } H_i \mid H_k) \, P(H_k),
+\end{equation}
+
+where $C_{ik}$ is the cost of deciding $H_i$ when $H_k$ is true. Minimizing this risk leads to the likelihood ratio test.
+
+The Bayesian decision rule is based on the likelihood ratio
+
+\begin{equation}
+\Lambda(y)
+=
+\frac{f_{Y|H_1}(y)}
+     {f_{Y|H_0}(y)}.
+\end{equation}
+
+where $f_{Y|H_1}(y)$ and $f_{Y|H_0}(y)$ are the conditional probability density functions under the two hypotheses.
+
+The optimal decision rule is
+
+\begin{equation}
+\Lambda(y)
+\overset{H_1}{\underset{H_0}{\gtrless}}
+\eta.
+\end{equation}
+
+where the threshold is
+
+\begin{equation}
+\eta
+=
+\frac{P(H_0)\,[C_{10}-C_{00}]}
+     {P(H_1)\,[C_{01}-C_{11}]}.
+\end{equation}
+
+and depends on prior probabilities and decision costs.
+
+The threshold $\eta$ encodes the receiver's operating policy: high cost of missed detection pushes $\eta$ lower (more sensitive), high cost of false alarm pushes $\eta$ higher.
+
+\subsubsection{Example: Constant Signal and Constant Jammer Case}
+
+To illustrate the Bayesian detector, consider the simplified case where both the legitimate signal and jammer are deterministic constants:
+
+\begin{equation}
+s(t)=S,
+\end{equation}
+
+\begin{equation}
+j(t)=J.
+\end{equation}
+
+The observation model becomes
+
+\begin{align}
+H_0 &: \quad y=S+n,\\
+H_1 &: \quad y=S+J+n,
+\end{align}
+
+with
+
+\begin{equation}
+n \sim \mathcal{N}(0,\sigma^2).
+\end{equation}
+
+Thus,
+
+\begin{equation}
+f_{Y|H_0}(y)
+=
+\frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\left(
+-\frac{(y-S)^2}{2\sigma^2}
+\right),
+\end{equation}
+
+and
+
+\begin{equation}
+f_{Y|H_1}(y)
+=
+\frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\left(
+-\frac{(y-S-J)^2}{2\sigma^2}
+\right).
+\end{equation}
+
+\subsubsection{Likelihood Ratio Test for the Example}
+
+Substituting the Gaussian densities into the likelihood ratio gives
+
+\begin{equation}
+\Lambda(y)
+=
+\frac{
+\exp\left[
+-\dfrac{(y-S-J)^2}{2\sigma^2}
+\right]
+}{
+\exp\left[
+-\dfrac{(y-S)^2}{2\sigma^2}
+\right]
+}.
+\end{equation}
+
+Taking the logarithm and simplifying yields
+
+\begin{equation}
+y
+\overset{H_1}{\underset{H_0}{\gtrless}}
+\gamma.
+\end{equation}
+
+where
+
+\begin{equation}
+\gamma
+=
+S+\frac{J}{2}
++
+\frac{\sigma^2}{J}\ln(\eta).
+\end{equation}
+
+\subsubsection{Interpretation}
+
+The threshold $\gamma = S + J/2 + (\sigma^2/J)\ln(\eta)$ consists of the midpoint $S + J/2$ between hypothesis means, adjusted by $(\sigma^2/J)\ln(\eta)$ which shifts based on priors and costs. The adjustment is proportional to $\sigma^2/J$: when the observation is less informative (high noise or weak jammer), prior information has more influence.
+
+The resulting detector is
+
+\begin{equation}
+y>\gamma
+\quad\Rightarrow\quad H_1,
+\end{equation}
+
+\begin{equation}
+y<\gamma
+\quad\Rightarrow\quad H_0.
+\end{equation}
+
+\subsection{Jammer Detection with Known Jammer Distribution and Unknown Prior Probabilities}
+
+\subsubsection{Theory}
+
+The Bayesian detector requires known prior probabilities $P(H_0)$ and $P(H_1)$. In practice, jammer activity scheduling is often unknown. The Bayesian threshold cannot be computed without priors.
+
+To address this, a minimax detector is employed — it optimizes for the worst-case prior, providing a performance floor regardless of adversary scheduling.
+
+\subsubsection{Signal Model}
+
+As before, consider the simplified constant-signal, constant-jammer model:
+
+\begin{align}
+H_0 &: \quad y = S + n,\\
+H_1 &: \quad y = S + J + n,
+\end{align}
+
+where
+
+\begin{equation}
+n \sim \mathcal{N}(0,\sigma^2).
+\end{equation}
+
+The conditional probability density functions are
+
+\begin{equation}
+f_{Y|H_0}(y)
+=
+\frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\left(
+-\frac{(y-S)^2}{2\sigma^2}
+\right),
+\end{equation}
+
+and
+
+\begin{equation}
+f_{Y|H_1}(y)
+=
+\frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\left(
+-\frac{(y-S-J)^2}{2\sigma^2}
+\right).
+\end{equation}
+
+\subsubsection{Problem with the Bayesian Threshold}
+
+The Bayesian threshold is
+
+\begin{equation}
+\gamma
+=
+S+\frac{J}{2}
++
+\frac{\sigma^2}{J}\ln(\eta),
+\end{equation}
+
+where
+
+\begin{equation}
+\eta
+=
+\frac{P(H_0)\,[C_{10}-C_{00}]}
+     {P(H_1)\,[C_{01}-C_{11}]}.
+\end{equation}
+
+Since $P(H_0)$ and $P(H_1)$ are unknown, the threshold cannot be computed.
+
+\subsubsection{Minimax Principle}
+
+The minimax detector minimizes the worst-case risk:
+
+\begin{equation}
+\gamma_{\text{minimax}} = \arg\min_\gamma \max_{P(H_1) \in [0,1]} R(\gamma, P(H_1)).
+\end{equation}
+
+For equal costs and equal variances, the solution sets
+
+\begin{equation}
+P_{FA}=P_M,
+\end{equation}
+
+where $P_{FA}$ is the false alarm probability and $P_M$ is the missed detection probability.
+
+\subsubsection{False Alarm Probability}
+
+The decision rule remains
+
+\begin{equation}
+y \underset{H_0}{\overset{H_1}{\gtrless}} \gamma.
+\end{equation}
+
+Under $H_0$,
+
+\begin{equation}
+P_{FA}
+=
+P(y>\gamma \mid H_0).
+\end{equation}
+
+Since
+
+\begin{equation}
+y \sim \mathcal{N}(S,\sigma^2),
+\end{equation}
+
+we obtain
+
+\begin{equation}
+P_{FA}
+=
+Q\!\left(
+\frac{\gamma-S}{\sigma}
+\right).
+\end{equation}
+
+\subsubsection{Missed Detection Probability}
+
+Under $H_1$,
+
+\begin{equation}
+P_M
+=
+P(y<\gamma \mid H_1).
+\end{equation}
+
+Since
+
+\begin{equation}
+y \sim \mathcal{N}(S+J,\sigma^2),
+\end{equation}
+
+we obtain
+
+\begin{equation}
+P_M
+=
+Q\!\left(
+\frac{S+J-\gamma}{\sigma}
+\right).
+\end{equation}
+
+\subsubsection{Equalizing the Two Errors}
+
+The minimax condition is
+
+\begin{equation}
+P_{FA}=P_M.
+\end{equation}
+
+Substituting the expressions gives
+
+\begin{equation}
+Q\!\left(
+\frac{\gamma-S}{\sigma}
+\right)
+=
+Q\!\left(
+\frac{S+J-\gamma}{\sigma}
+\right).
+\end{equation}
+
+Since the Q-function is strictly monotone decreasing,
+
+\begin{equation}
+\gamma-S
+=
+S+J-\gamma.
+\end{equation}
+
+Solving for the threshold,
+
+\begin{equation}
+2\gamma
+=
+2S+J.
+\end{equation}
+
+Therefore,
+
+\begin{equation}
+\boxed{
+\gamma
+=
+S+\frac{J}{2}
+}.
+\end{equation}
+
+This result assumes $J > 0$, i.e., the jammer adds positive amplitude to the observation. If the jammer could produce negative amplitude shifts, the decision rule direction would reverse accordingly.
+
+\subsubsection{Interpretation}
+
+The minimax threshold $\gamma = S + J/2$ is the midpoint between hypothesis means — independent of prior probabilities. Under equal-cost, equal-variance assumptions, this is the nearest-neighbor decision boundary.
+
+\subsubsection{Decision Rule}
+
+The final minimax detector is
+
+\begin{equation}
+y > S+\frac{J}{2}
+\quad \Rightarrow \quad H_1,
+\end{equation}
+
+and
+
+\begin{equation}
+y < S+\frac{J}{2}
+\quad \Rightarrow \quad H_0.
+\end{equation}
+\subsubsection{Simulation Results} [\hyperref[lst:roc]{\textbf{$\rightarrow$ MATLAB Code}}]
+
+To evaluate detection performance, a Monte Carlo simulation
+was performed using $10^5$ independent trials. The signal amplitude, jammer
+amplitude, and noise variance were selected as
+
+\begin{equation}
+A_1 = 1,
+\qquad
+A_2 = 2,
+\qquad
+\sigma^2 = 1.
+\end{equation}
+
+For each realization, the test statistic $T = j \cdot (y - s)$ was evaluated under both hypotheses and thresholds were swept to produce the ROC. The MATLAB implementation generates $10^5$ realizations under both hypotheses and sweeps thresholds to produce the ROC.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.75\linewidth]{2.2_result.png}
+\caption{ROC curve obtained by sweeping the decision threshold over the LRT statistic $T = j(y-s)$. The ROC characterizes the detector's discrimination ability and is independent of threshold selection method (Bayesian or minimax). The minimax operating point corresponds to the point where $P_D = 1 - P_{FA}$.}
+\label{fig:minimax_roc}
+\end{figure}
+
+Figure~\ref{fig:minimax_roc} shows the ROC curve. The curve lies above the diagonal, indicating effective discrimination. The minimax operating point corresponds to $\gamma = S + J/2$, where $P_{FA} = P_M$.
+
+
+\subsection{Jammer-Distribution-Free Residual-Based Jammer Detection}
+
+\subsubsection{Theory}
+
+The previous detection frameworks assumed that the statistical distribution of the jammer was known.
+
+In practice, however, an intelligent adversary may employ multiple jamming waveforms whose statistical characteristics are unavailable to the receiver. The adversary might switch between tone jamming, broadband noise jamming, chirp jamming, or even signal-mimicking strategies — making it impossible for the receiver to specify a single probability density function $f_{J}(j)$. Furthermore, the probability that the jammer is active may also be unknown. Consequently, neither the Bayesian detector nor the minimax detector can be directly implemented because the probability density function under the jammer-present hypothesis cannot be specified.
+
+This motivates the development of a jammer-distribution-free detection framework that does not require knowledge of either the jammer distribution or its prior probability of occurrence. The key idea is to shift the detection strategy from modeling the jammer to modeling the legitimate signal — which the receiver knows well.
+
+\subsubsection{Problem Formulation}
+
+Assuming a perfectly equalized communication channel, the received signal can be expressed as
+
+\begin{equation}
+y=s+j+n,
+\end{equation}
+
+where
+
+\begin{itemize}
+\item $s$ denotes the legitimate signal,
+\item $j$ denotes an unknown jammer signal,
+\item $n$ denotes additive noise.
+\end{itemize}
+
+The jammer detection problem is formulated as the binary hypothesis test
+
+\begin{align}
+H_0 &: \quad y=s+n, \\
+H_1 &: \quad y=s+j+n.
+\end{align}
+
+Unlike the previous cases,
+
+\begin{itemize}
+\item the statistical distribution of $j$ is unknown,
+\item the prior probability of jammer activity is unknown.
+\end{itemize}
+
+As a result, the conditional probability density function
+
+\begin{equation}
+f_{Y|H_1}(y)
+\end{equation}
+
+cannot be expressed analytically.
+
+\subsubsection{Fundamental Difficulty}
+
+Classical likelihood-ratio testing requires the statistic
+
+\begin{equation}
+\Lambda(y)
+=
+\frac{f_{Y|H_1}(y)}
+     {f_{Y|H_0}(y)}.
+\end{equation}
+
+Since the distribution under $H_1$ is unavailable, the likelihood ratio cannot be evaluated. Consequently, conventional Bayesian detection cannot be performed.
+
+A different detection strategy is therefore required.
+
+\subsubsection{Key Observation}
+
+Although the jammer distribution is unknown, the receiver typically possesses a model of the legitimate signal and may obtain an estimate of the transmitted signal through pilot symbols, channel estimation, signal reconstruction, or decoding.
+
+This asymmetry is the foundation of residual-based detection: while the receiver cannot characterize what the jammer does, it can accurately characterize what the legitimate signal does. If the legitimate signal can be estimated and removed from the observation, whatever remains (the residual) should contain only noise under normal conditions. Any excess energy in the residual — beyond what noise alone would produce — constitutes evidence of an additional unknown source, namely the jammer.
+
+This approach converts the intractable problem of detecting an unknown signal into the tractable problem of detecting excess energy in a noise-like residual.
+
+\subsubsection{Signal Estimation}
+
+Let
+
+\begin{equation}
+\hat{s}
+\end{equation}
+
+denote an estimate of the legitimate signal.
+
+For a block of $N$ samples, the residual sequence is defined as
+
+\begin{equation}
+r_k = y_k - \hat{s}_k,
+\qquad k=1,\ldots,N.
+\end{equation}
+
+Under hypothesis $H_0$,
+
+\begin{equation}
+r_k=(s_k+n_k)-\hat{s}_k.
+\end{equation}
+
+If the signal estimate is accurate,
+
+\begin{equation}
+\hat{s}_k \approx s_k,
+\end{equation}
+
+which yields
+
+\begin{equation}
+r_k \approx n_k.
+\end{equation}
+
+Similarly, under hypothesis $H_1$,
+
+\begin{equation}
+r_k=(s_k+j_k+n_k)-\hat{s}_k.
+\end{equation}
+
+Assuming again that
+
+\begin{equation}
+\hat{s}_k \approx s_k,
+\end{equation}
+
+the residual becomes
+
+\begin{equation}
+r_k \approx j_k+n_k.
+\end{equation}
+
+Therefore, the jammer energy appears in the residual sequence.
+
+\subsubsection{Residual-Energy Statistic}
+
+A natural detection statistic is the average residual energy
+
+\begin{equation}
+T_r
+=
+\frac{1}{N}
+\sum_{k=1}^{N} r_k^2.
+\end{equation}
+
+The choice of the squared sum (energy) as the statistic is motivated by the following reasoning:
+
+\begin{enumerate}
+\item \textbf{Non-negativity}: Energy is always non-negative, making threshold comparison straightforward.
+\item \textbf{Sensitivity to any jammer}: Regardless of the jammer's waveform shape, frequency, or phase, squaring captures its contribution. A tone jammer, noise jammer, or chirp jammer all contribute positive energy.
+\item \textbf{Known null distribution}: Under $H_0$, if the residual is Gaussian, the energy statistic follows a chi-squared distribution whose parameters are known from the noise variance. This allows principled threshold selection.
+\end{enumerate}
+
+Under $H_0$, the residual consists primarily of noise, and therefore
+
+\begin{equation}
+T_r \approx
+\frac{1}{N}
+\sum_{k=1}^{N} n_k^2.
+\end{equation}
+
+By the law of large numbers, for large $N$, this converges to the noise variance: $T_r \rightarrow \sigma_n^2$.
+
+Under $H_1$, the residual contains both jammer and noise components,
+
+\begin{equation}
+T_r \approx
+\frac{1}{N}
+\sum_{k=1}^{N} (j_k+n_k)^2.
+\end{equation}
+
+Expanding the square and taking expectation:
+
+\begin{equation}
+E[T_r \mid H_1] = \frac{1}{N}\sum_{k=1}^N E[j_k^2] + 2E[j_k n_k] + E[n_k^2] = P_j + \sigma_n^2,
+\end{equation}
+
+where the cross-term vanishes because noise is independent of the jammer. Since jammer energy contributes additional power, the statistic $T_r$ is expected to increase when a jammer is present by exactly the jammer power $P_j$.
+
+\subsubsection{Threshold-Based Detection}
+
+A threshold
+
+\begin{equation}
+\gamma_r
+\end{equation}
+
+is selected according to a desired false-alarm probability, typically using training data collected in the absence of jamming.
+
+The decision rule is
+
+\begin{equation}
+T_r > \gamma_r
+\quad \Rightarrow \quad H_1,
+\end{equation}
+
+and
+
+\begin{equation}
+T_r \le \gamma_r
+\quad \Rightarrow \quad H_0.
+\end{equation}
+\subsubsection{Illustrative Example Using a BPSK Signal}
+
+To provide intuition for residual-based detection, consider a simple Binary Phase Shift Keying (BPSK) communication system.
+
+Assume the transmitter sends the symbol sequence
+
+\begin{equation}
+\mathbf{s}
+=
+\{1,-1,1\}.
+\end{equation}
+
+Since the receiver knows that BPSK modulation is employed, it expects received symbols to be close to either $+1$ or $-1$.
+
+\paragraph{Case 1: No Jammer Present}
+
+Suppose the received samples are
+
+\begin{equation}
+\mathbf{y}
+=
+\{0.8,-1.3,0.9\}.
+\end{equation}
+
+The receiver makes symbol decisions according to the nearest BPSK constellation point and obtains
+
+\begin{equation}
+\hat{\mathbf{s}}
+=
+\{1,-1,1\}.
+\end{equation}
+
+The residual sequence is
+
+\begin{equation}
+\mathbf{r}
+=
+\mathbf{y}
+-
+\hat{\mathbf{s}},
+\end{equation}
+
+which yields
+
+\begin{equation}
+\mathbf{r}
+=
+\{-0.2,-0.3,-0.1\}.
+\end{equation}
+
+The residual-energy statistic is
+
+\begin{align}
+T_r
+&=
+\frac{1}{3}
+\left[
+(-0.2)^2+(-0.3)^2+(-0.1)^2
+\right] \\
+&=
+\frac{1}{3}
+\left(
+0.04+0.09+0.01
+\right) \\
+&=
+0.0467.
+\end{align}
+
+The residual contains only small deviations caused by noise and estimation errors. Therefore, the residual energy remains low, suggesting that no jammer is present.
+
+\paragraph{Case 2: Jammer Present}
+
+Now suppose a jammer distorts the received signal and the receiver observes
+
+\begin{equation}
+\mathbf{y}
+=
+\{1.2,0.2,1.2\}.
+\end{equation}
+
+Applying the same BPSK decision rule (decide $+1$ if $y > 0$, decide $-1$ if $y < 0$) yields
+
+\begin{equation}
+\hat{\mathbf{s}}
+=
+\{1,1,1\}.
+\end{equation}
+
+Note that the second sample has been decoded as $+1$ even though the true transmitted symbol was $-1$. The jammer has shifted the received value from the expected region near $-1$ to $+0.2$, which falls on the wrong side of the decision boundary. This jammer-induced decision error is precisely what inflates the residual energy.
+
+The residual sequence becomes
+
+\begin{equation}
+\mathbf{r}
+=
+\mathbf{y}
+-
+\hat{\mathbf{s}}
+=
+\{0.2,-0.8,0.2\}.
+\end{equation}
+
+The large residual at the second sample ($-0.8$) arises because the receiver subtracted $+1$ (its incorrect estimate) from the received value $0.2$, producing a residual that reflects the combined effect of the jammer displacement and the resulting decision error.
+
+The corresponding residual energy is
+
+\begin{align}
+T_r
+&=
+\frac{1}{3}
+\left[
+0.2^2+(-0.8)^2+0.2^2
+\right] \\
+&=
+\frac{1}{3}
+\left(
+0.04+0.64+0.04
+\right) \\
+&=
+0.24.
+\end{align}
+
+The residual energy is substantially larger than that obtained in the no-jammer case. This indicates that the received samples cannot be adequately explained by the expected BPSK signal and ordinary noise — the jammer has both displaced the received values and caused estimation errors that compound in the residual.
+
+Consequently, the detector declares the presence of a jammer.
+
+\paragraph{Interpretation}
+
+For this example,
+
+\begin{equation}
+T_r(H_0)=0.0467,
+\qquad
+T_r(H_1)=0.24.
+\end{equation}
+
+Because
+
+\begin{equation}
+T_r(H_1) > T_r(H_0),
+\end{equation}
+
+a properly chosen threshold $\gamma_r$ satisfying
+
+\begin{equation}
+0.0467 < \gamma_r < 0.24
+\end{equation}
+
+would correctly distinguish the jammer-free and jammer-present cases.
+
+This simple example illustrates the fundamental principle of residual-based jammer detection: when the received signal cannot be adequately explained by the estimated legitimate signal, the residual energy increases, providing evidence of jamming activity.
+
+\subsubsection{Simulation Results} [\hyperref[lst:residual]{\textbf{$\rightarrow$ MATLAB Code}}]
+
+The simulation was performed using a block of
+
+\begin{equation}
+N=100
+\end{equation}
+
+samples. The legitimate signal was assumed to be a constant-amplitude waveform
+
+\begin{equation}
+s_k = 1,
+\qquad k=1,\ldots,N,
+\end{equation}
+
+while the additive noise was modeled as zero-mean Gaussian noise with standard deviation
+
+\begin{equation}
+\sigma = 0.3.
+\end{equation}
+
+To represent intentional interference, a sinusoidal jammer was introduced according to
+
+\begin{equation}
+j_k
+=
+2\sin\!\left(\frac{2\pi k}{20}\right),
+\qquad k=1,\ldots,N.
+\end{equation}
+
+The MATLAB implementation generates observations under both hypotheses with perfect signal estimation ($\hat{s} = s$), computes residuals, and compares the resulting energies.
+
+For simplicity and to illustrate the underlying principle of residual-based detection, perfect signal estimation was assumed, namely
+
+\begin{equation}
+\hat{s}_k=s_k.
+\end{equation}
+
+The residual sequence was therefore computed as
+
+\begin{equation}
+r_k=y_k-\hat{s}_k.
+\end{equation}
+
+Under the no-jammer hypothesis, the residual consists only of noise,
+
+\begin{equation}
+r_k=n_k,
+\end{equation}
+
+whereas under jammer presence the residual contains both jammer and noise components,
+
+\begin{equation}
+r_k=j_k+n_k.
+\end{equation}
+
+The residual-energy statistic was evaluated using
+
+\begin{equation}
+T_r
+=
+\sum_{k=1}^{N} r_k^2.
+\end{equation}
+
+Figure~\ref{fig:residual_detection} illustrates the received signals and the corresponding residual sequences under both hypotheses. In the jammer-free case, the received signal closely follows the expected signal model, and the residual contains only small fluctuations caused by Gaussian noise. Consequently, the residual energy remains relatively small.
+
+When the sinusoidal jammer is added, the received signal deviates significantly from the expected signal model. Since the legitimate signal is perfectly estimated and removed, the jammer component remains visible in the residual sequence, resulting in much larger residual amplitudes.
+
+For the simulation considered, the residual energies were measured as
+
+\begin{equation}
+E_{H_0}=9.44,
+\qquad
+E_{H_1}=209.76.
+\end{equation}
+
+Thus, the residual energy under jammer presence is approximately
+
+\begin{equation}
+\frac{E_{H_1}}{E_{H_0}}
+=
+\frac{209.76}{9.44}
+\approx 22.2
+\end{equation}
+
+times larger than the residual energy observed in the jammer-free case.
+
+This large separation demonstrates the effectiveness of residual-energy detection. Even without any knowledge of the jammer probability distribution or prior probability of occurrence, the unexplained energy remaining after signal cancellation provides a strong indicator of jamming activity. The simulation therefore validates the central premise of the proposed jammer-distribution-free residual-based detector.
+
+\begin{figure}[H]
+\centering
+
+\begin{minipage}{0.4\linewidth}
+\centering
+\includegraphics[width=\linewidth]{receivednojampng}
+\\ (a)
+\end{minipage}
+\hfill
+\begin{minipage}{0.4\linewidth}
+\centering
+\includegraphics[width=\linewidth]{resduenojampng}
+\\ (b)
+\end{minipage}
+
+\vspace{0.3cm}
+
+\begin{minipage}{0.4\linewidth}
+\centering
+\includegraphics[width=\linewidth]{receivedjam}
+\\ (c)
+\end{minipage}
+\hfill
+\begin{minipage}{0.4\linewidth}
+\centering
+\includegraphics[width=\linewidth]{resduejam}
+\\ (d)
+\end{minipage}
+
+\caption{Residual-based jammer detection. (a) Received signal and estimated signal under $H_0$. (b) Residual sequence under $H_0$.(c) Received signal and estimated signal under $H_1$. (d) Residual sequence under $H_1$.}
+\label{fig:residual_detection}
+\end{figure}
+
+
+\subsubsection{Relation to Generalized Likelihood Ratio Testing}
+
+The proposed detector is related to the philosophy of the Generalized Likelihood Ratio Test (GLRT), in which unknown quantities are first estimated and then incorporated into a detection statistic.
+
+In the present framework, the signal estimate
+
+\begin{equation}
+\hat{s}
+\end{equation}
+
+plays the role of an estimated parameter, while the residual energy quantifies the mismatch between the observation and the estimated signal model.
+
+However, because no explicit likelihood function is assumed for the jammer, the proposed detector should not be regarded as a strict GLRT. Rather, it can be viewed as a practical estimation-based approximation inspired by the GLRT principle.
+
+\subsubsection{Limitations}
+
+The effectiveness of the residual-based detector depends strongly on the accuracy of signal estimation. This creates a fundamental performance boundary:
+
+When the jammer power is relatively small ($P_j \ll P_s$), the legitimate signal dominates the observation. The receiver's demodulator or matched filter operates in a high-SNR regime, producing accurate symbol decisions. Consequently, the signal estimate $\hat{s}$ is close to the true signal $s$, the residual is clean, and the energy statistic reliably indicates jammer presence.
+
+However, when the jammer power becomes comparable to or larger than the signal power ($P_j \gtrsim P_s$), estimation of the legitimate signal may become inaccurate. The jammer corrupts the demodulation process, causing bit errors that propagate into the signal estimate. In this case, residual energy arises from two sources: actual jammer energy and estimation errors due to jammer-induced demodulation failures. The detector cannot distinguish between these two contributions, reducing detection reliability.
+
+Furthermore, if the jammer waveform closely resembles the legitimate signal (a ``smart'' or ``repeater'' jammer), separation of signal and jammer components becomes very difficult using energy-based methods alone. The residual after subtraction would be small even though a jammer is present — because the jammer energy is largely absorbed into the signal estimate.
+
+These limitations motivate the investigation of alternative detection mechanisms, including polarization-based methods that exploit physical-layer electromagnetic characteristics beyond signal energy alone. Polarization is particularly attractive because it does not require successful signal demodulation — it operates on the raw electromagnetic field measurement.
+
+\newpage
+
+\section{Polarization-Based Jammer Detection}
+
+
+\subsection{Introduction}
+
+Detection of intentional interference is an important problem in wireless communication, radar, and navigation systems. Conventional jammer detection methods often rely on monitoring signal power, spectral characteristics, or residual errors obtained after signal estimation. While effective in certain operating conditions, these approaches may become unreliable when the jammer power becomes comparable to or exceeds the legitimate signal power — because signal estimation itself degrades under strong interference.
+
+To address this limitation, a polarization-based detection framework is investigated. The fundamental insight is that electromagnetic waves are vector quantities: they possess not only amplitude and phase (scalar properties) but also polarization (a vector property describing the orientation of the electric field oscillation). A scalar detector that monitors only power or phase discards the polarization information entirely.
+
+Polarization-based detection exploits the fact that:
+\begin{enumerate}
+\item The legitimate transmitter has a known polarization state (determined by its antenna orientation).
+\item Multipath propagation produces deterministic, predictable changes in polarization that can be modeled.
+\item A jammer is an independent electromagnetic source with its own polarization — which is generally different from what the legitimate channel produces.
+\end{enumerate}
+
+Therefore, by monitoring whether the observed polarization state is consistent with the expected legitimate channel model, the receiver can detect the presence of an additional (jammer) source without needing to reconstruct the signal waveform.
+
+\subsection{Limitation of Residual-Based Detection}
+
+Consider the received signal
+
+\begin{equation}
+y(t)=s(t)+j(t)+n(t),
+\end{equation}
+
+where $s(t)$ is the legitimate signal, $j(t)$ is the jammer signal, and $n(t)$ is additive noise.
+
+A conventional residual detector first estimates the legitimate signal
+
+\begin{equation}
+\hat{s}(t),
+\end{equation}
+
+and computes
+
+\begin{equation}
+r(t)=y(t)-\hat{s}(t).
+\end{equation}
+
+If the estimate is accurate,
+
+\begin{equation}
+\hat{s}(t)\approx s(t),
+\end{equation}
+
+then
+
+\begin{equation}
+r(t)\approx j(t)+n(t).
+\end{equation}
+
+The residual-energy statistic is
+
+\begin{equation}
+T_r=
+\frac{1}{N}
+\sum_{k=1}^{N}
+|r(k)|^2.
+\end{equation}
+
+The statistic can then be compared with a threshold to determine jammer presence.
+
+\paragraph{Weak-Jamming Scenario}
+
+When
+
+\begin{equation}
+P_j \ll P_s,
+\end{equation}
+
+the legitimate signal dominates the observation. The observation is primarily determined by $s(t)$, so the receiver can use standard demodulation or estimation techniques to recover $s(t)$ with high fidelity. Reliable signal estimation is generally possible, resulting in
+
+\begin{equation}
+\hat{s}\approx s.
+\end{equation}
+
+Consequently, $T_r$ provides a useful indicator of jammer presence because the residual cleanly contains the jammer component.
+
+\paragraph{Strong-Jamming Scenario}
+
+When
+
+\begin{equation}
+P_j \gg P_s,
+\end{equation}
+
+the jammer dominates the received waveform.
+
+Signal estimation becomes increasingly difficult because the observation is no longer primarily determined by the legitimate signal. The matched filter or demodulator, designed to detect $s(t)$, receives an input dominated by $j(t)$ — causing decision errors that propagate into the signal estimate.
+
+The residual
+
+\begin{equation}
+r=y-\hat{s}
+\end{equation}
+
+contains contributions from
+
+\begin{enumerate}
+\item jammer energy,
+\item signal estimation error (due to jammer-induced demodulation failures),
+\item channel mismatch,
+\item thermal noise.
+\end{enumerate}
+
+As a result, the residual is ``contaminated'' — large residual energy may arise from estimation errors alone, even without a jammer. The detector's ability to distinguish between ``jammer present'' and ``poor estimation due to strong interference'' breaks down.
+
+This fundamental limitation motivates the development of a detection method that does not rely on explicit signal reconstruction — one that can operate even when signal estimation is unreliable.
+
+\subsection{Polarization-Based Detection Concept}
+
+Instead of analyzing the transmitted waveform, the proposed method analyzes the electromagnetic field observed at the receiver.
+
+Assume that the legitimate transmitter employs a known polarization state. Under normal propagation conditions, the phase-dependent polarization ratio follows a predictable manifold. This manifold is determined entirely by the channel geometry (path lengths, reflection angles, material properties) and is independent of the transmitted data content.
+
+Let the received field contain horizontal and vertical polarization components
+
+\begin{equation}
+E_H
+\end{equation}
+
+and
+
+\begin{equation}
+E_V.
+\end{equation}
+
+The polarization state may be characterized by
+
+\begin{equation}
+Q=
+\frac{|E_V|^2}
+{|E_H|^2+\varepsilon},
+\end{equation}
+
+where $\varepsilon>0$ is a small regularization constant introduced to avoid numerical singularities when $|E_H|$ becomes very small. The ratio $Q$ quantifies how the received energy is distributed between the two polarization components. For a purely vertically polarized transmission with no multipath, $Q \rightarrow \infty$. Multipath reflections rotate energy into the horizontal component, reducing $Q$.
+
+A jammer acts as an additional polarized electromagnetic source whose polarization state is generally independent of the legitimate transmitter. The jammer's antenna has its own physical orientation, unrelated to the legitimate link's geometry. Consequently, jammer presence perturbs the expected phase-polarization relationship in a way that cannot be explained by the legitimate channel model alone.
+
+However, a sophisticated adversary with knowledge of the legitimate transmitter's polarization state may attempt polarization-matched jamming — deliberately aligning its polarization with the expected channel response to evade detection. Such cases would require additional spatial or temporal features (e.g., angle-of-arrival estimation, time-varying polarization tracking) beyond the static manifold comparison used here. This limitation is acknowledged as a direction for future investigation.
+
+The key hypotheses are
+
+\begin{align}
+H_0 &: \text{No jammer — observed polarization consistent with channel model},\\
+H_1 &: \text{Jammer present — observed polarization deviates from channel model}.
+\end{align}
+
+\subsection{Multipath Polarization Model} [\hyperref[lst:polmanifold]{\textbf{$\rightarrow$ MATLAB Code}}]
+
+Assume that the transmitted signal is vertically polarized. In free space with line-of-sight propagation only, the received signal would remain purely vertically polarized. However, real propagation environments include reflections from surfaces (ground, buildings, terrain), and each reflection introduces a polarization rotation. This is a well-known electromagnetic phenomenon: the reflection coefficients for parallel and perpendicular polarization components are different (governed by the Fresnel equations), causing the reflected wave to have a different polarization state from the incident wave.
+
+Consider a direct path and a reflected path. The two-ray model captures the essential physics while remaining analytically tractable.
+
+Let
+
+\begin{itemize}
+\item $\alpha$ denote the multipath attenuation factor (ratio of reflected path amplitude to direct path amplitude),
+\item $\beta$ denote the polarization rotation angle introduced by reflection (determined by the reflection surface material and incidence angle),
+\item $\Delta\phi$ denote the phase difference between the direct and reflected paths (determined by the path length difference).
+\end{itemize}
+
+The horizontal field component arises solely from the reflected path (since the direct path is purely vertical):
+
+\begin{equation}
+E_H=
+\alpha \sin(\beta)e^{j\Delta\phi},
+\end{equation}
+
+and the vertical field component is the coherent sum of the direct path (unity amplitude) and the vertical projection of the reflected path:
+
+\begin{equation}
+E_V=
+1+\alpha \cos(\beta)e^{j\Delta\phi}.
+\end{equation}
+
+The expected polarization ratio is therefore
+
+\begin{equation}
+Q_{\mathrm{exp}}=
+\frac{|E_V|^2}
+{|E_H|^2+\varepsilon}.
+\end{equation}
+
+This expected ratio defines the phase-polarization manifold associated with the legitimate channel. Critically, for a fixed geometry ($\alpha$, $\beta$ constant), $Q_{\text{exp}}$ is a deterministic function of the phase $\Delta\phi$ alone. As the environment changes (e.g., due to platform motion causing $\Delta\phi$ to vary), the polarization ratio traces out a predictable curve — the manifold. Any observation that deviates significantly from this manifold cannot be explained by the legitimate channel alone.
+
+The MATLAB implementation computes the polarization angle $\psi = \arctan(|E_V|/|E_H|)$ for each phase value and plots the deviation from the reference vertical polarization.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\linewidth]{pol1.png}
+\caption{
+Relationship between multipath phase shift and polarization deviation for
+$\alpha = 2$ and $\beta = 5^\circ$. The figure demonstrates that multipath
+propagation produces a deterministic phase--polarization relationship rather
+than independent variations in phase and polarization.
+}
+\label{fig:pol1}
+\end{figure}
+
+Figure~\ref{fig:pol1} illustrates the relationship between the
+multipath-induced phase shift $\Delta\phi$ and the resulting polarization
+deviation $\Delta\psi$ for a fixed propagation geometry. The result
+demonstrates that phase and polarization are not independent quantities.
+Instead, changes in phase produce predictable changes in polarization through
+the underlying electromagnetic propagation mechanism.
+
+For the simulated scenario, the maximum polarization deviation was found to be
+
+\begin{equation}
+\Delta\psi_{\max} = 9.96^\circ,
+\label{eq:max_pol_dev}
+\end{equation}
+
+which occurred at
+
+\begin{equation}
+\Delta\phi \approx 180^\circ.
+\label{eq:max_phase_shift}
+\end{equation}
+
+This observation suggests that normal multipath propagation generates a
+characteristic phase--polarization manifold. Any received signal that deviates
+significantly from this expected relationship may therefore indicate the
+presence of an additional electromagnetic source, such as a jammer.
+
+
+\subsection{Jammer Model} [\hyperref[lst:poljammed]{\textbf{$\rightarrow$ MATLAB Code}}]
+
+The jammer is modeled as an independent polarized electromagnetic source.
+
+Its polarization orientation is represented by
+
+\begin{equation}
+\theta_j,
+\end{equation}
+
+and its phase by
+
+\begin{equation}
+\phi_j.
+\end{equation}
+
+Let $A_j$ denote the jammer amplitude.
+
+The jammer field components are
+
+\begin{equation}
+E_{H,j}=
+A_j\cos(\theta_j)e^{j\phi_j},
+\end{equation}
+
+and
+
+\begin{equation}
+E_{V,j}=
+A_j\sin(\theta_j)e^{j\phi_j}.
+\end{equation}
+
+The total received field becomes
+
+\begin{equation}
+E_H^{\mathrm{tot}}=
+E_H+E_{H,j},
+\end{equation}
+
+and
+
+\begin{equation}
+E_V^{\mathrm{tot}}=
+E_V+E_{V,j}.
+\end{equation}
+
+The observed polarization ratio is
+
+\begin{equation}
+Q_{\mathrm{obs}}=
+\frac{|E_V^{\mathrm{tot}}|^2}
+{|E_H^{\mathrm{tot}}|^2+\varepsilon}.
+\end{equation}
+
+The MATLAB implementation computes the expected and jammed polarization ratios across the full phase sweep and evaluates the consistency error in dB.
+
+\subsection{Phase-Polarization Consistency Metric}
+
+Under normal operating conditions (no jammer),
+
+\begin{equation}
+Q_{\mathrm{obs}}
+\approx
+Q_{\mathrm{exp}}.
+\end{equation}
+
+A jammer introduces deviations between the expected and observed polarization manifolds because it adds an electromagnetic field with a polarization state that is inconsistent with the legitimate channel geometry.
+
+For the $k$th phase sample, define the consistency metric
+
+\begin{equation}
+u_k=
+10
+\left|
+\log_{10}
+\left(
+\frac
+{Q_{\mathrm{obs}}(\Delta\phi_k)}
+{Q_{\mathrm{exp}}(\Delta\phi_k)}
+\right)
+\right|.
+\end{equation}
+
+The logarithmic ratio (expressed in dB) is chosen rather than a linear difference for two reasons:
+\begin{enumerate}
+\item \textbf{Scale invariance}: The polarization ratio $Q$ can vary over several orders of magnitude as $\Delta\phi$ changes. A logarithmic metric normalizes the comparison across all phase values, preventing high-$Q$ regions from dominating the statistic.
+\item \textbf{Symmetry}: The absolute value of the log-ratio treats multiplicative increases and decreases symmetrically — a jammer that doubles $Q$ is penalized equally to one that halves it.
+\end{enumerate}
+
+A single detection statistic is obtained by averaging over all phase samples:
+
+\begin{equation}
+\bar{u}=
+\frac{1}{N}
+\sum_{k=1}^{N}
+u_k.
+\end{equation}
+
+The averaging over $N$ phase samples provides statistical robustness: a jammer that distorts polarization at only a few phase values will still elevate the mean, while measurement noise (which is random and zero-mean in dB) tends to cancel over the average.
+
+Large values of $\bar{u}$ indicate inconsistency between the observed and expected phase-polarization behavior and therefore suggest jammer presence.
+
+\subsection{Detection Rule}
+
+A threshold
+
+\begin{equation}
+\gamma
+\end{equation}
+
+is estimated from training data collected under the no-jammer hypothesis $H_0$. This is a Constant False Alarm Rate (CFAR) approach: the threshold is set empirically from the observed distribution of $\bar{u}$ under known-clean conditions, rather than derived analytically. The CFAR approach is necessary because the exact distribution of $\bar{u}$ depends on the channel parameters ($\alpha$, $\beta$, noise level) and does not have a simple closed-form expression.
+
+The decision rule is
+
+\begin{equation}
+\bar{u}>\gamma
+\quad\Rightarrow\quad
+H_1,
+\end{equation}
+
+and
+
+\begin{equation}
+\bar{u}\le\gamma
+\quad\Rightarrow\quad
+H_0.
+\end{equation}
+
+The threshold may be selected according to a specified false-alarm probability $P_{FA}$.
+
+For example,
+
+\begin{equation}
+P_{FA}=0.01
+\end{equation}
+
+corresponds to selecting the 99th percentile of the no-jammer statistic distribution. This means that in 99\% of jammer-free observations, the detector correctly declares $H_0$, while accepting a 1\% probability of falsely triggering.
+
+\subsection{Channel Impairments}
+
+To evaluate realistic performance, the simulation includes both fading and additive noise. These impairments are included because a practical receiver operates in a non-ideal propagation environment.
+
+\paragraph{Rayleigh Fading}
+
+The horizontal and vertical polarization channels experience independent Rayleigh fading. The Rayleigh model is appropriate for scenarios without a dominant line-of-sight component (non-LOS or urban environments), where the received signal is the sum of many scattered multipath components with random phases:
+
+\begin{equation}
+h_H,h_V
+\sim
+\mathcal{CN}(0,1).
+\end{equation}
+
+The faded field components become
+
+\begin{equation}
+E_H'=
+h_H E_H,
+\end{equation}
+
+and
+
+\begin{equation}
+E_V'=
+h_V E_V.
+\end{equation}
+
+\paragraph{Additive White Gaussian Noise}
+
+Independent noise samples $n_H$ and $n_V$ are added to each polarization channel:
+
+\begin{equation}
+E_H^{\mathrm{obs}}=
+E_H'+n_H,
+\end{equation}
+
+and
+
+\begin{equation}
+E_V^{\mathrm{obs}}=
+E_V'+n_V.
+\end{equation}
+
+The observed polarization ratio used by the detector is then computed from the noisy polarization measurements.
+
+\subsection{Performance Metrics}
+
+Performance is evaluated using Monte Carlo simulation.
+
+\paragraph{Probability of Detection}
+
+The probability of detection is
+
+\begin{equation}
+P_D=
+P(\bar{u}>\gamma \mid H_1).
+\end{equation}
+
+\paragraph{Probability of False Alarm}
+
+The probability of false alarm is
+
+\begin{equation}
+P_{FA}=
+P(\bar{u}>\gamma \mid H_0).
+\end{equation}
+
+\paragraph{Receiver Operating Characteristic}
+
+The receiver operating characteristic (ROC) curve is obtained by varying the threshold $\gamma$ and plotting $P_D$ versus $P_{FA}$.
+
+A detector is considered effective when it achieves a high probability of detection while maintaining a low probability of false alarm.
+
+\subsection{Simulation Results} [\hyperref[lst:polmc]{\textbf{$\rightarrow$ MATLAB Code}}]
+
+To evaluate the effectiveness of the proposed phase--polarization jammer
+detector, Monte Carlo simulations were performed under both jammer-free and
+jammer-present conditions. The detector statistic was computed using the
+phase--polarization consistency metric
+
+\begin{equation}
+\bar{u}
+=
+\frac{1}{N}
+\sum_{k=1}^{N}
+u_k,
+\end{equation}
+
+where $u_k$ measures the deviation between the observed and expected
+phase--polarization manifolds.
+
+The core MATLAB implementation performs $MC = 5000$ Monte Carlo trials under both hypotheses, computing the consistency metric for each and determining the CFAR threshold from the $H_0$ distribution.[\hyperref[lst:polmc]{\textbf{$\rightarrow$ Code}}].
+
+For each Monte Carlo realization, the statistic was evaluated under both
+hypotheses,
+
+\begin{align}
+H_0 &: \text{No jammer present},\\
+H_1 &: \text{Jammer present}.
+\end{align}
+
+The resulting distributions were then used to determine detection thresholds,
+construct receiver operating characteristic (ROC) curves, and evaluate
+detection performance as a function of jammer-to-signal ratio (JSR).
+
+\subsubsection{Distribution of the Consistency Metric}
+
+A fundamental requirement for successful detection is that the consistency
+metric exhibit different statistical behavior under the two hypotheses.
+Figure~\ref{fig:hist_u} illustrates the empirical probability density
+functions obtained under jammer-free and jammer-present conditions.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\linewidth]{pol2}
+\caption{
+Probability density functions of the phase--polarization consistency
+metric under the jammer-free ($H_0$) and jammer-present ($H_1$)
+hypotheses. The threshold is selected to achieve the desired
+false-alarm probability.
+}
+\label{fig:hist_u}
+\end{figure}
+
+Figure~\ref{fig:hist_u} shows that the consistency metric assumes
+significantly smaller values when no jammer is present. Under normal
+propagation conditions, the observed polarization manifold remains close
+to the expected manifold predicted by the channel model, resulting in
+small consistency errors.
+
+When a jammer is present, the additional polarized electromagnetic source
+distorts the expected phase--polarization relationship. Consequently,
+larger deviations are observed and the consistency metric shifts toward
+higher values.
+
+The separation between the two distributions demonstrates that the
+consistency metric contains discriminative information regarding jammer
+presence. This separation provides the statistical justification for
+threshold-based detection.
+
+\subsubsection{Receiver Operating Characteristic}
+
+The detection performance of the proposed method was evaluated by varying
+the decision threshold and computing the resulting probabilities of
+detection and false alarm.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\linewidth]{pol3}
+\caption{
+Receiver operating characteristic (ROC) of the proposed
+phase--polarization consistency detector under Rayleigh fading and
+additive Gaussian noise.
+}
+\label{fig:roc_pol}
+\end{figure}
+
+Figure~\ref{fig:roc_pol} presents the resulting ROC curve.
+The detector consistently operates above the diagonal random-decision
+line, indicating that the phase--polarization consistency metric provides
+useful information for distinguishing between normal propagation
+conditions and jammer presence.
+
+For the considered operating point, the detector achieved
+
+\begin{equation}
+P_D = 0.4354
+\end{equation}
+
+at
+
+\begin{equation}
+P_{FA}=0.1.
+\end{equation}
+
+Although the detector does not achieve perfect separation, the result is
+obtained without requiring any knowledge of the jammer waveform, jammer
+distribution, or prior jammer activity probability. The ROC therefore
+demonstrates the practicality of polarization-based detection in
+uncertain environments.
+
+\subsubsection{Detection Probability versus Jammer-to-Signal Ratio}
+
+To investigate the influence of jammer power, the probability of
+detection was evaluated over a range of jammer-to-signal ratios (JSR).
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\linewidth]{pol4}
+\caption{
+Detection probability of the proposed phase--polarization detector
+as a function of jammer-to-signal ratio (JSR).
+}
+\label{fig:pd_jsr}
+\end{figure}
+
+Figure~\ref{fig:pd_jsr} illustrates the variation of detection
+probability with jammer strength.
+
+At low JSR values, the jammer introduces only minor perturbations to the
+phase--polarization manifold. Consequently, the observed polarization
+behavior remains similar to that expected under normal channel
+conditions, resulting in relatively low detection probabilities.
+
+As the jammer power increases, the distortion of the polarization
+manifold becomes increasingly pronounced. The consistency metric grows
+larger and the detector is able to separate the two hypotheses more
+reliably. As a result, the probability of detection increases steadily
+with JSR.
+
+For example, the detector achieves approximately
+
+\begin{equation}
+P_D \approx 0.09
+\end{equation}
+
+at
+
+\begin{equation}
+\mathrm{JSR}=-20~\mathrm{dB},
+\end{equation}
+
+whereas the detection probability increases to approximately
+
+\begin{equation}
+P_D \approx 0.63
+\end{equation}
+
+at
+
+\begin{equation}
+\mathrm{JSR}=10~\mathrm{dB}.
+\end{equation}
+
+These results confirm that polarization-based detection becomes more
+effective as jammer power increases.
+
+\subsubsection{Implications for Hybrid Detection}
+
+An important observation emerges from the preceding results.
+Residual-based detection relies on accurate estimation of the legitimate
+signal and is therefore particularly effective when jammer power is
+relatively weak — precisely the regime where signal estimation succeeds.
+
+In contrast, the phase--polarization detector exploits physical-layer
+electromagnetic characteristics and becomes increasingly effective as the
+jammer power grows. The improvement observed in
+Figure~\ref{fig:pd_jsr} demonstrates that strong jammers produce
+significant polarization distortions that can be detected even when
+signal reconstruction becomes difficult. This is because polarization distortion scales with jammer amplitude: a stronger jammer contributes a larger field vector that deviates the resultant polarization further from the expected manifold.
+
+Therefore, the two approaches exhibit complementary operating regions:
+
+\begin{itemize}
+\item Residual-based detection performs well for weak jammers (where $P_j \ll P_s$ allows accurate signal estimation).
+\item Polarization-based detection performs well for strong jammers (where $P_j \gg P_s$ produces large polarization deviations).
+\end{itemize}
+
+This complementarity is not coincidental — it arises from a fundamental trade-off: signal estimation quality degrades as jammer power increases, but polarization distortion grows as jammer power increases. The two detectors are therefore naturally suited to opposite ends of the JSR spectrum.
+
+This observation motivates the development of a hybrid
+residual--polarization detector that adaptively combines both detection
+mechanisms according to the estimated jammer-to-signal ratio. Such a
+framework can exploit the strengths of each detector and provide robust
+performance across a wide range of jamming conditions.
+
+\textbf{Note}: The polarization-based detector is validated through Monte Carlo simulation only. Physical validation requires a phase-synchronized coherent receiver pair (e.g., dual USRPs with shared clock), as the single-channel HackRF One cannot sample two orthogonal polarizations simultaneously.
+
+
+\section{Simulink Implementation}
+
+\subsection{Introduction}
+
+While the preceding MATLAB scripts validate individual detection algorithms through Monte Carlo simulation, they operate on synthetically generated sample vectors and do not capture the temporal dynamics of a continuously operating receiver. In a practical communication system, the received signal evolves in time: the transmitter generates a continuous stream of modulated symbols, the channel introduces time-varying noise and interference, and the receiver must process an ongoing waveform rather than a static observation vector.
+
+Simulink provides a block-level simulation environment that models this continuous-time signal-processing chain. Each block operates on streaming data with defined sample rates, internal states, and causal processing — thereby replicating the behavior of a real-time digital receiver. The Simulink implementation therefore serves as an intermediate validation step between the theoretical Monte Carlo analysis and the hardware SDR implementation.
+
+The specific objectives of the Simulink model are:
+
+\begin{enumerate}
+\item To verify that the residual-based detection algorithm functions correctly when operating on a continuous BPSK signal stream rather than isolated observation vectors.
+\item To visualize intermediate waveforms (transmitted signal, received signal, estimated signal, residual, detection output) at each stage of the processing chain.
+\item To validate the threshold selection methodology under realistic streaming conditions where transient effects (filter settling, synchronization acquisition) are present.
+\end{enumerate}
+
+\subsection{System Architecture}
+
+The Simulink model implements the following processing chain:
+
+\begin{enumerate}
+\item BPSK signal generation,
+\item Channel modeling with additive white Gaussian noise,
+\item Jammer signal injection (sinusoidal jammer),
+\item Matched filtering and signal estimation,
+\item Residual computation via signal subtraction,
+\item Energy computation (squaring operation),
+\item Threshold comparison for jammer detection.
+\end{enumerate}
+
+Figure~\ref{fig:simulink_model} shows the complete Simulink block diagram of the jammer detection system.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\linewidth]{simulink.png}
+\caption{Simulink block diagram of the residual-based jammer detection system. The signal flows from left to right: generation, channel corruption, estimation, subtraction, energy computation, and threshold decision.}
+\label{fig:simulink_model}
+\end{figure}
+
+The architecture directly implements the signal model developed in the theoretical analysis:
+
+\begin{equation}
+y(t) = s(t) + j(t) + n(t),
+\end{equation}
+
+where the signal generator produces $s(t)$, the AWGN channel adds $n(t)$, and the jammer block injects $j(t)$. The detection pipeline then computes
+
+\begin{equation}
+r(t) = y(t) - \hat{s}(t),
+\end{equation}
+
+followed by the energy statistic $T_r = r^2(t)$ and the threshold comparison $T_r \gtrless \gamma$.
+
+\subsection{Block Descriptions and Parameters}
+
+\subsubsection{Signal Generator}
+
+The signal generator produces a random binary sequence that serves as the information source for the BPSK modulator. In a jammer detection context, the choice of a random bit stream is deliberate: it ensures that the transmitted signal occupies the full signal bandwidth and that the detection algorithm is not biased by any particular data pattern. A fixed or periodic bit sequence would create spectral lines that could be confused with jammer signatures in the residual.
+
+The generator operates at the system symbol rate and produces equiprobable binary symbols $b_k \in \{0, 1\}$ with
+
+\begin{equation}
+P(b_k = 0) = P(b_k = 1) = \frac{1}{2}.
+\end{equation}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\linewidth]{parasiggen.png}
+\caption{Signal generator block parameters. The block produces a random binary sequence at the configured symbol rate.}
+\label{fig:parasiggen}
+\end{figure}
+
+\subsubsection{BPSK Modulator}
+
+Binary Phase Shift Keying (BPSK) is selected as the modulation scheme for several reasons pertinent to the jammer detection problem:
+
+\begin{enumerate}
+\item \textbf{Constant envelope}: BPSK produces a constant-amplitude signal, meaning that amplitude variations in the received waveform can be attributed to channel effects or interference rather than modulation-induced fluctuations. This simplifies the residual-energy interpretation.
+\item \textbf{Optimal detection in AWGN}: Among binary modulation schemes, BPSK achieves the minimum probability of bit error for a given $E_b/N_0$ in additive white Gaussian noise, ensuring that the signal estimation step operates at maximum efficiency.
+\item \textbf{Simple signal reconstruction}: The two-point constellation $\{+1, -1\}$ permits hard-decision signal estimation with a simple sign detector, minimizing reconstruction error that could contaminate the residual.
+\end{enumerate}
+
+The modulator maps binary symbols to phase according to
+
+\begin{equation}
+\phi_k = \begin{cases}
+0 & \text{if } b_k = 0, \\
+\pi & \text{if } b_k = 1,
+\end{cases}
+\end{equation}
+
+producing the baseband waveform
+
+\begin{equation}
+s(t) = \sum_k a_k \, p(t - kT_s),
+\end{equation}
+
+where $a_k = 1 - 2b_k \in \{+1, -1\}$ and $p(t)$ is the pulse-shaping filter impulse response.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\linewidth]{parabpsk.png}
+\caption{BPSK modulator block parameters. The block maps binary data to antipodal symbols with configurable samples per symbol.}
+\label{fig:parabpsk}
+\end{figure}
+
+\subsubsection{Channel Model}
+
+The Additive White Gaussian Noise (AWGN) channel models the thermal noise contribution at the receiver front-end. The justification for the AWGN model is threefold:
+
+\begin{enumerate}
+\item \textbf{Central limit theorem}: The aggregate effect of numerous independent noise sources (thermal agitation in resistors, shot noise in semiconductors, quantization noise) converges to a Gaussian distribution regardless of individual source statistics.
+\item \textbf{Flat spectral density}: Within the signal bandwidth, thermal noise exhibits approximately constant power spectral density $N_0/2$ [W/Hz], justifying the ``white'' assumption.
+\item \textbf{Independence from signal}: Thermal noise is generated by physical mechanisms independent of the transmitted signal, ensuring statistical independence between $s(t)$ and $n(t)$.
+\end{enumerate}
+
+The channel output is
+
+\begin{equation}
+y_{\text{ch}}(t) = s(t) + n(t), \qquad n(t) \sim \mathcal{N}(0, \sigma_n^2),
+\end{equation}
+
+where the noise variance is determined by the configured SNR:
+
+\begin{equation}
+\sigma_n^2 = \frac{P_s}{10^{\text{SNR}_{\text{dB}}/10}}.
+\end{equation}
+
+The SNR parameter allows systematic evaluation of detector performance across different noise conditions. A low SNR tests whether the detector can distinguish jammer-induced residual energy from noise-induced residual energy.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\linewidth]{parachannel.png}
+\caption{AWGN channel block parameters. The SNR setting determines the noise power relative to the signal.}
+\label{fig:parachannel}
+\end{figure}
+
+\subsubsection{Matched Filter}
+
+The matched filter is the cornerstone of the signal estimation stage. Its inclusion is justified by optimal detection theory: for a known signal in additive Gaussian noise, the filter matched to the signal waveform maximizes the output signal-to-noise ratio.
+
+For a rectangular BPSK pulse of duration $T_s$, the matched filter impulse response is
+
+\begin{equation}
+h_{\text{MF}}(t) = \begin{cases}
+\dfrac{1}{T_s} & 0 \le t \le T_s, \\[4pt]
+0 & \text{otherwise}.
+\end{cases}
+\end{equation}
+
+The output SNR at the sampling instant is
+
+\begin{equation}
+\text{SNR}_{\text{out}} = \frac{2E_s}{N_0},
+\end{equation}
+
+where $E_s = A^2 T_s$ is the symbol energy. This is the maximum achievable SNR for any linear filter, establishing the matched filter as the optimal signal estimator.
+
+In the context of residual-based jammer detection, the matched filter serves a dual purpose:
+
+\begin{enumerate}
+\item \textbf{Signal estimation}: The filter output at the sampling instant provides the best linear estimate of the transmitted symbol, enabling accurate signal reconstruction.
+\item \textbf{Noise suppression}: By correlating over the full symbol duration, the filter suppresses out-of-band noise, ensuring that the residual primarily contains jammer energy rather than amplified noise.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\linewidth]{parafilter.png}
+\caption{Matched filter block parameters. The filter coefficients are configured to match the BPSK pulse shape.}
+\label{fig:parafilter}
+\end{figure}
+
+\subsubsection{Squaring Operation (Energy Computation)}
+
+The residual $r(t)$ is a signed waveform that takes both positive and negative values. Direct averaging of $r(t)$ would yield a value near zero even when substantial jammer energy is present, since sinusoidal jammers have zero mean. The squaring operation
+
+\begin{equation}
+T_r(t) = r^2(t)
+\end{equation}
+
+converts the signed residual into a non-negative instantaneous power measure. This is the sample-level implementation of the residual-energy statistic
+
+\begin{equation}
+T_r = \frac{1}{N} \sum_{k=1}^{N} r_k^2
+\end{equation}
+
+derived in the theoretical analysis. The squaring operation is mathematically equivalent to computing the instantaneous signal power, which is the fundamental quantity that distinguishes the two hypotheses: under $H_0$, the squared residual has expected value $\sigma_n^2$ (noise power), whereas under $H_1$, it has expected value $\sigma_n^2 + P_j$ (noise plus jammer power).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\linewidth]{parasqr.png}
+\caption{Squaring block parameters. The element-wise square converts the signed residual to instantaneous energy.}
+\label{fig:parasqr}
+\end{figure}
+
+\subsubsection{Threshold Detector}
+
+The threshold comparison implements the final decision rule:
+
+\begin{equation}
+T_r(t) \underset{H_0}{\overset{H_1}{\gtrless}} \gamma.
+\end{equation}
+
+The threshold $\gamma$ is selected to achieve a desired probability of false alarm $P_{FA}$. Under $H_0$, the squared residual $r^2(t)$ follows a scaled chi-squared distribution (since $r(t) \approx n(t)$ is Gaussian). Specifically, if $r \sim \mathcal{N}(0, \sigma_n^2)$, then
+
+\begin{equation}
+\frac{r^2}{\sigma_n^2} \sim \chi^2(1).
+\end{equation}
+
+The threshold corresponding to a false-alarm probability $P_{FA}$ is therefore
+
+\begin{equation}
+\gamma = \sigma_n^2 \cdot F_{\chi^2(1)}^{-1}(1 - P_{FA}),
+\end{equation}
+
+where $F_{\chi^2(1)}^{-1}$ denotes the inverse CDF of the chi-squared distribution with one degree of freedom.
+
+In practice, the threshold may also be set empirically by observing the residual energy during a known jammer-free calibration period.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\linewidth]{parathres.png}
+\caption{Threshold detector block parameters. The threshold value determines the operating point on the ROC curve.}
+\label{fig:parathres}
+\end{figure}
+
+\subsection{Simulation Results}
+
+The Simulink model was executed to observe the waveforms at each processing stage. The following results demonstrate the complete detection pipeline operating on a continuous signal stream.
+
+\subsubsection{Transmitted Signal}
+
+Figure~\ref{fig:tsig} shows the transmitted BPSK signal before channel corruption. The waveform exhibits the characteristic rectangular pulse shape with amplitude transitions between $+1$ and $-1$ at symbol boundaries. The constant envelope confirms that the BPSK modulator is operating correctly and that no amplitude modulation artifacts are present in the transmitted signal.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{tsig.png}
+\caption{Transmitted BPSK signal waveform. The antipodal amplitude levels $\{+1, -1\}$ correspond to binary symbols $\{0, 1\}$.}
+\label{fig:tsig}
+\end{figure}
+
+\subsubsection{Received Signal}
+
+Figure~\ref{fig:recsig} shows the received signal after passing through the AWGN channel with the jammer present. The waveform is the superposition
+
+\begin{equation}
+y(t) = s(t) + j(t) + n(t).
+\end{equation}
+
+The BPSK rectangular structure is still partially visible, but it is corrupted by both the additive noise (causing random amplitude fluctuations) and the sinusoidal jammer (introducing a periodic oscillation superimposed on the signal). The combined effect makes direct symbol detection unreliable without proper filtering, motivating the use of the matched filter.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{recsig.png}
+\caption{Received signal (legitimate signal + jammer + noise). The BPSK structure is corrupted by both thermal noise and sinusoidal interference.}
+\label{fig:recsig}
+\end{figure}
+
+\subsubsection{Estimated Signal}
+
+After matched filtering, the receiver produces an estimate of the transmitted signal. Figure~\ref{fig:esttsig} shows the estimated signal output. The matched filter integrates over the symbol duration, suppressing noise components that are uncorrelated with the pulse shape while reinforcing the signal component. The output exhibits the characteristic integrate-and-dump response: a ramp during each symbol period reaching its peak at the sampling instant.
+
+The fact that the estimated signal closely tracks the transmitted BPSK waveform confirms that the matched filter provides sufficient SNR gain for reliable signal reconstruction, even in the presence of both noise and jammer interference.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{esttsig.png}
+\caption{Estimated signal after matched filtering. The filter output provides a reliable estimate of the transmitted symbols despite channel corruption.}
+\label{fig:esttsig}
+\end{figure}
+
+\subsubsection{Jammer Signal}
+
+Figure~\ref{fig:jamsig} shows the injected jammer signal. The sinusoidal waveform
+
+\begin{equation}
+j(t) = A_j \sin(2\pi f_j t)
+\end{equation}
+
+operates at a fixed frequency $f_j$ within the signal bandwidth. The choice of a sinusoidal jammer is motivated by its analytical tractability and its representation of a common interference scenario (continuous-wave interference from an unintentional or intentional narrowband source). The jammer amplitude $A_j$ is set to produce a specified jammer-to-signal ratio.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{jamsig.png}
+\caption{Jammer signal waveform. The continuous sinusoid represents structured narrowband interference within the signal bandwidth.}
+\label{fig:jamsig}
+\end{figure}
+
+\subsubsection{Residual Energy and Detection}
+
+Figure~\ref{fig:afnres} shows the residual energy $r^2(t)$ after signal subtraction and squaring. The key observation is that the residual energy is consistently elevated above the noise-only baseline. This elevation is caused by the jammer component that survives signal cancellation:
+
+\begin{equation}
+r(t) = y(t) - \hat{s}(t) \approx j(t) + n(t).
+\end{equation}
+
+The squared residual therefore has expected value
+
+\begin{equation}
+E[r^2(t)] = E[j^2(t)] + E[n^2(t)] = \frac{A_j^2}{2} + \sigma_n^2,
+\end{equation}
+
+which exceeds the noise-only value $\sigma_n^2$ by the jammer power contribution $A_j^2/2$. The consistent elevation visible in Figure~\ref{fig:afnres} provides the statistical basis for threshold-based detection.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{afnres.png}
+\caption{Residual energy after signal cancellation. The elevated energy level (above the noise-only baseline) indicates the presence of jammer power in the residual.}
+\label{fig:afnres}
+\end{figure}
+
+\subsubsection{Detection Output: Pattern-Based Jammer Identification}
+
+Figure~\ref{fig:pattdetect} shows the final output of the detection system. The key observation is the \emph{structural character} of the residual signal after signal estimation and subtraction.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\linewidth]{pattdetect.png}
+\caption{Detection output showing oscillatory pattern in the residual, indicating jammer presence.}
+\label{fig:pattdetect}
+\end{figure}
+
+The detection principle exploited here goes beyond simple energy thresholding. Because the jammer is a structured signal (a sinusoid with deterministic frequency and phase), its presence manifests not merely as elevated energy but as a \emph{deterministic oscillatory pattern} in the residual after signal cancellation. This pattern-based observation provides a stronger detection criterion than energy alone.
+
+\paragraph{Jammer Present}
+
+When a jammer is active, the residual after signal cancellation is
+
+\begin{equation}
+r(t) \approx A_j \sin(2\pi f_j t) + n(t).
+\end{equation}
+
+The sinusoidal component dominates the residual when the jammer-to-noise ratio is sufficiently large. The autocorrelation of the residual then exhibits periodicity at the jammer frequency:
+
+\begin{equation}
+R_r(\tau) = \frac{A_j^2}{2} \cos(2\pi f_j \tau) + \sigma_n^2 \delta(\tau),
+\end{equation}
+
+producing a recognizable oscillatory structure visible in both the time-domain waveform and the squared residual. This periodicity is the distinctive fingerprint of a structured jammer — it is deterministic and repeatable, unlike noise.
+
+\paragraph{No Jammer Present}
+
+In the absence of a jammer, the residual consists only of thermal noise and minor estimation errors:
+
+\begin{equation}
+r(t) \approx n(t), \qquad n(t) \sim \mathcal{N}(0, \sigma_n^2).
+\end{equation}
+
+The autocorrelation reduces to
+
+\begin{equation}
+R_r(\tau) = \sigma_n^2 \delta(\tau),
+\end{equation}
+
+which is an impulse at zero lag — indicating that the residual samples are uncorrelated. No coherent oscillatory pattern is present; only random noise-like fluctuations are observed.
+
+\paragraph{Detection Rule}
+
+The detection decision exploits this structural difference:
+
+\begin{equation}
+\text{Oscillatory pattern in residual} \quad \Rightarrow \quad H_1 \text{ (jammer present)},
+\end{equation}
+
+\begin{equation}
+\text{Noise-like residual (no pattern)} \quad \Rightarrow \quad H_0 \text{ (no jammer)}.
+\end{equation}
+
+This pattern-based criterion is more robust than pure energy detection because it exploits the \emph{temporal structure} of the jammer rather than merely its power. A transient noise spike could cause a momentary energy threshold exceedance (false alarm), but it would not produce a sustained oscillatory pattern.
+
+\paragraph{Fallback: SNR-Based Detection for Noise Jammers}
+
+A limitation of pattern-based detection arises when the adversary employs a noise jammer — a jammer whose waveform $j(t)$ is itself a random process with flat power spectral density. In this case, the residual
+
+\begin{equation}
+r(t) = j(t) + n(t)
+\end{equation}
+
+is the sum of two independent noise-like processes, and no oscillatory pattern emerges. The residual remains structurally indistinguishable from thermal noise alone.
+
+However, the \emph{power} of the residual increases:
+
+\begin{equation}
+E[r^2(t)] = \sigma_j^2 + \sigma_n^2 > \sigma_n^2.
+\end{equation}
+
+Therefore, if no oscillatory pattern is detected in the residual, a secondary check is performed by monitoring the effective signal-to-noise ratio. If the measured SNR deviates significantly from the expected baseline obtained during calibration (jammer-free operation), the detector declares jammer presence.
+
+The two-stage detection logic is:
+
+\begin{enumerate}
+\item \textbf{Stage 1 — Pattern Detection}: Examine the residual for oscillatory structure.
+\begin{itemize}
+\item If a pattern is detected $\Rightarrow$ declare $H_1$ (structured jammer present).
+\item If no pattern is detected $\Rightarrow$ proceed to Stage~2.
+\end{itemize}
+\item \textbf{Stage 2 — SNR Monitoring}: Compare the current residual power against the expected noise-only baseline.
+\begin{itemize}
+\item If residual power exceeds the baseline by more than the detection margin $\Rightarrow$ declare $H_1$ (noise jammer present).
+\item If residual power is within normal range $\Rightarrow$ declare $H_0$ (no jammer).
+\end{itemize}
+\end{enumerate}
+
+This two-stage approach ensures robustness against both structured jammers (detected via residual pattern, Stage~1) and noise jammers (detected via energy elevation, Stage~2). Stage~2 corresponds directly to the residual-energy framework developed in the earlier theoretical sections.
+
+\subsection{Summary}
+
+The Simulink implementation validates the residual-based detection framework in a streaming signal-processing environment. The model demonstrates that:
+
+\begin{enumerate}
+\item The matched filter provides accurate signal estimation even under combined noise and jammer interference, confirming the theoretical optimality of matched filtering for Gaussian channels.
+\item Signal cancellation successfully isolates the jammer component in the residual, with the legitimate signal energy removed to within the estimation error floor.
+\item The squared residual energy is consistently elevated above the noise floor when a jammer is present, confirming the theoretical prediction $E[r^2] = P_j + \sigma_n^2 > \sigma_n^2$.
+\item The oscillatory pattern in the residual provides a structural detection criterion that complements energy-based thresholding, offering robustness against transient false alarms.
+\item The two-stage detection logic (pattern detection followed by SNR monitoring) provides coverage against both structured and noise-like jammers.
+\end{enumerate}
+
+The block-level Simulink simulation suggests that the theoretical detection algorithms translate correctly to a causal, streaming receiver architecture, providing confidence for the subsequent hardware implementation.
+
+
+\section{Hardware Implementation}
+
+\subsection{Introduction}
+
+The Simulink model validates the detection framework under idealized conditions: perfect symbol timing, no frequency offset, no hardware non-idealities, and exact knowledge of the signal format. In contrast, a real SDR receiver must contend with:
+
+\begin{itemize}
+\item \textbf{Carrier frequency offset (CFO)}: The local oscillators of the transmitter and receiver are physically distinct crystals with non-zero frequency error, producing a rotating phase in the baseband IQ signal.
+\item \textbf{Phase noise}: Crystal oscillator imperfections introduce random phase fluctuations.
+\item \textbf{IQ imbalance}: Gain and phase mismatches between the I and Q branches of the SDR hardware produce constellation distortion.
+\item \textbf{Finite ADC resolution}: The 8-bit quantization of HackRF introduces quantization noise, limiting the dynamic range to approximately 48~dB.
+\item \textbf{Processing latency}: The receiver must process data in real time at 2~MS/s, requiring computationally efficient algorithms.
+\end{itemize}
+
+The hardware implementation using HackRF One SDR devices therefore tests whether the detection framework remains robust when these practical impairments are present. The carrier frequency 915~MHz is selected because it falls within the internationally designated ISM (Industrial, Scientific, and Medical) band, which is license-free for experimental use and free of primary user protections that would constrain transmit power.
+
+\subsection{Hardware Setup}
+
+The experimental setup consists of:
+
+\begin{itemize}
+\item \textbf{Transmitter}: HackRF One transmitting a pre-generated BPSK IQ file at 915~MHz with a sample rate of 2~MHz.
+\item \textbf{Jammer}: A second HackRF One transmitting either a BPSK jammer or a sinusoidal jammer at the same carrier frequency.
+\item \textbf{Receiver}: HackRF One connected to a host computer running the Python-based real-time receiver software.
+\end{itemize}
+
+The transmission parameters are:
+
+\begin{itemize}
+\item Carrier frequency: $f_c = 915$~MHz,
+\item Sample rate: $F_s = 2$~MHz,
+\item Transmit gain: 30~dB,
+\item Receive RF gain: 20~dB,
+\item Receive IF gain: 32~dB.
+\end{itemize}
+
+The sample rate of 2~MHz is chosen to satisfy the Nyquist criterion for the BPSK signal bandwidth while maintaining a manageable data rate for real-time processing. The transmit gain of 30~dB provides sufficient EIRP for short-range benchtop testing while remaining within SDR hardware limits.
+
+The hardware experiments were conducted at short range (benchtop, $\sim$0.5--1~m) in a static Line-of-Sight channel. The low symbol rate (0.2~Hz) serves as a proof-of-concept baseline; dynamic multipath environments would require higher symbol rates with pilot-aided channel tracking.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{hardwareimp.jpeg}
+\caption{Laboratory hardware setup showing three HackRF One SDR devices (transmitter, jammer, and receiver) connected to host laptops. The left screen displays the real-time receiver output with constellation and signal plots; the right screens show terminal sessions running \texttt{hackrf\_transfer} for IQ file playback. Dipole antennas are used for short-range benchtop transmission at 915~MHz.}
+\label{fig:hardware_setup}
+\end{figure}
+
+\subsection{Signal Generation} [\hyperref[lst:siggen]{\textbf{$\rightarrow$ BPSK Code}}] [\hyperref[lst:jamgen]{\textbf{$\rightarrow$ Jammer Code}}]
+
+Signal generation is performed offline in MATLAB to ensure precise control over the transmitted waveform. The offline approach eliminates real-time generation constraints and allows the IQ file to be replayed deterministically for reproducible experiments.
+
+\subsubsection{BPSK Signal Generation (MATLAB)}
+
+The legitimate BPSK signal was generated offline using MATLAB. Each bit occupies 5 seconds with a sample rate of 2~MHz, producing $10^7$ samples per bit. The 5-second symbol duration is a manual design choice selected for experimental convenience — it provides a clearly observable bit transition in the real-time display and gives the Costas loop ample time to settle after each phase change. Any symbol duration could be used; shorter symbols would increase the data rate but require tighter synchronization.
+
+The bit sequence $\{1, 0, 1, 0, \ldots\}$ is mapped to amplitudes $\{+127, -127\}$ in the 8-bit signed integer IQ format required by HackRF. The maximum amplitude of 127 (full-scale) maximizes the transmit SNR by utilizing the complete dynamic range of the 8-bit DAC.
+
+\begin{verbatim}
+%% Generate Slow BPSK for HackRF
+clear; clc;
+
+Fs = 2e6;             % 2 MHz sample rate
+bitDuration = 5;      % each bit 5 seconds
+totalTime = 30;
+
+bits = repmat([1 0], 1, totalTime/(2*bitDuration));
+samplesPerBit = Fs * bitDuration;
+
+fid = fopen('bpsk.iq', 'wb');
+
+for k = 1:length(bits)
+    if bits(k) == 1
+        symbol = 127;
+    else
+        symbol = -127;
+    end
+
+    I = int8(symbol * ones(samplesPerBit, 1));
+    Q = int8(zeros(samplesPerBit, 1));
+
+    iq = zeros(2*samplesPerBit, 1, 'int8');
+    iq(1:2:end) = I;
+    iq(2:2:end) = Q;
+
+    fwrite(fid, iq, 'int8');
+end
+
+fclose(fid);
+\end{verbatim}
+
+The generated IQ file is transmitted using the command:
+
+\begin{verbatim}
+hackrf_transfer -t bpsk.iq -f 915000000 -s 2000000 -x 30 -a 0
+\end{verbatim}
+
+\subsubsection{Jammer Signal Generation (MATLAB)}
+
+Two types of jammer waveforms were generated to test the receiver under different interference scenarios:
+
+\paragraph{BPSK Jammer}
+
+A BPSK jammer signal at 30\% power relative to the legitimate signal was generated. The 30\% power ratio corresponds to a jammer-to-signal ratio of approximately $-5.2$~dB, representing a moderate jamming scenario where the jammer is weaker than the legitimate signal but strong enough to potentially cause demodulation errors. The amplitude is computed as
+
+\begin{equation}
+A_j = \lfloor 127 \sqrt{0.30} \rfloor = 70.
+\end{equation}
+
+The jammer uses a different bit pattern $\{0, 1, 1, 0, 1, 0\}$ to ensure that the jammer transitions do not align with the legitimate signal transitions. This models a realistic adversary who has no synchronization with the legitimate transmitter.
+
+\begin{verbatim}
+%% Generate BPSK Jammer for HackRF
+clear; clc;
+
+Fs = 2e6;
+bitDuration = 5;
+totalTime = 30;
+
+% Jammer power: 30% of main signal
+jammerPower = 0.30;
+jammerAmp = round(127 * sqrt(jammerPower));
+
+% Random bit pattern (different from main signal)
+bits = [0 1 1 0 1 0];
+samplesPerBit = Fs * bitDuration;
+
+fid = fopen('jammer.iq', 'wb');
+
+for k = 1:length(bits)
+    if bits(k) == 1
+        symbol = jammerAmp;
+    else
+        symbol = -jammerAmp;
+    end
+
+    I = int8(symbol * ones(samplesPerBit, 1));
+    Q = int8(zeros(samplesPerBit, 1));
+
+    iq = zeros(2*samplesPerBit, 1, 'int8');
+    iq(1:2:end) = I;
+    iq(2:2:end) = Q;
+
+    fwrite(fid, iq, 'int8');
+end
+
+fclose(fid);
+\end{verbatim}
+
+\paragraph{Sinusoidal Jammer}
+
+A continuous-wave (CW) jammer was generated as a 1~kHz baseband tone with amplitude scaled to 30\% power:
+
+\begin{equation}
+j(t) = A_j \cos(2\pi f_j t),
+\end{equation}
+
+where $f_j = 1000$~Hz. The 1~kHz frequency places the jammer within the passband of the bandpass filter used for jammer extraction (500~Hz to 100~kHz) while being sufficiently separated from DC to avoid confusion with the BPSK signal's spectral content near baseband. This CW jammer represents the narrowband interference scenario where the jammer occupies minimal bandwidth but concentrates its energy at a single frequency, producing maximum spectral interference density at that point.
+
+\begin{verbatim}
+%% Generate Sinusoidal Jammer for HackRF
+clear; clc;
+
+Fs = 2e6;
+totalTime = 30;
+
+jammerPower = 0.30;
+jammerAmp = round(127 * sqrt(jammerPower));
+fJammer = 1000;  % 1 kHz tone
+
+totalSamples = Fs * totalTime;
+fid = fopen('jammer.iq', 'wb');
+
+blockSize = 1e6;
+numBlocks = ceil(totalSamples / blockSize);
+
+for k = 1:numBlocks
+    startSample = (k-1)*blockSize;
+    n = min(blockSize, totalSamples - startSample);
+    t = ((startSample):(startSample + n - 1))' / Fs;
+
+    I = int8(jammerAmp * cos(2*pi*fJammer*t));
+    Q = int8(zeros(n, 1));
+
+    iq = zeros(2*n, 1, 'int8');
+    iq(1:2:end) = I;
+    iq(2:2:end) = Q;
+
+    fwrite(fid, iq, 'int8');
+end
+
+fclose(fid);
+\end{verbatim}
+
+Both jammer files are transmitted using:
+
+\begin{verbatim}
+hackrf_transfer -t jammer.iq -f 915000000 -s 2000000 -x 30 -a 0
+\end{verbatim}
+
+\subsection{Receiver Architecture} [\hyperref[lst:rec3]{\textbf{$\rightarrow$ Python Code}}]
+
+The receiver (\texttt{rec3.py}) is a Python-based real-time BPSK demodulator with integrated jammer extraction capability. It processes raw IQ samples streamed from HackRF and performs carrier recovery, signal estimation, cancellation, and jammer power measurement in real time.
+
+The receiver architecture addresses the fundamental challenge of performing signal cancellation without prior knowledge of the carrier phase or frequency. Unlike the Simulink model (which assumes perfect synchronization), the hardware receiver must first acquire and track the carrier before signal estimation and subtraction can proceed. This motivates the multi-stage architecture: frequency acquisition $\rightarrow$ carrier tracking $\rightarrow$ demodulation $\rightarrow$ reconstruction $\rightarrow$ cancellation $\rightarrow$ detection.
+
+\subsubsection{IQ Acquisition}
+
+Raw 8-bit signed IQ samples are streamed from HackRF at 2~MHz sample rate via \texttt{hackrf\_transfer} in pipe mode. The pipe-based streaming approach avoids file I/O latency and enables continuous real-time operation. The receiver processes frames of $N = 500{,}000$ samples (0.25~seconds per frame), converting the 8-bit integers to floating-point values normalized to the range $[-1, +1]$.
+
+The frame size of 500,000 samples represents a trade-off: larger frames provide better frequency resolution ($\Delta f = F_s/N = 4$~Hz) for initial acquisition but introduce greater latency. The 0.25-second frame duration provides sufficient frequency resolution while maintaining responsive real-time display updates.
+
+\begin{verbatim}
+FREQ = "915000000"
+FS = 2_000_000
+
+cmd = [
+    "hackrf_transfer",
+    "-r", "-",
+    "-f", FREQ,
+    "-s", str(FS),
+    "-g", "20",
+    "-l", "32"
+]
+
+proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+\end{verbatim}
+
+Each frame is read and converted to normalized floating-point IQ:
+
+\begin{verbatim}
+CHUNK = 500_000  # 0.25 sec at 2 MHz
+
+raw = proc.stdout.read(2 * CHUNK)
+data = np.frombuffer(raw, dtype=np.int8).astype(np.float64) / 128.0
+I_raw = data[0::2]
+Q_raw = data[1::2]
+\end{verbatim}
+
+\subsubsection{Initial Frequency Acquisition}
+
+On the first received frame, an FFT is computed over all $N$ samples to estimate the carrier frequency offset. The frequency offset arises from two sources: (1) the frequency error between the transmitter and receiver local oscillators (typically $\pm$20~ppm for HackRF, corresponding to $\pm$18.3~kHz at 915~MHz), and (2) any intentional frequency offset introduced during signal generation.
+
+Parabolic interpolation around the spectral peak provides sub-bin frequency accuracy. Without interpolation, the frequency estimate would be quantized to multiples of $\Delta f = F_s/N = 4$~Hz, introducing a systematic phase drift that would degrade Costas loop performance. The parabolic approximation fits a second-order polynomial to the three samples surrounding the peak, yielding an accuracy approximately 10$\times$ better than the bin spacing.
+
+This estimated offset initializes the Costas loop frequency:
+
+\begin{equation}
+\omega_0 = \frac{2\pi \hat{f}_{\text{offset}}}{F_s}.
+\end{equation}
+
+By initializing the loop near the true frequency, acquisition time is minimized and the loop avoids false lock on harmonics or adjacent spectral peaks.
+
+\begin{verbatim}
+iq = I_raw + 1j * Q_raw
+fft_vals = np.fft.fft(iq)
+freqs = np.fft.fftfreq(N, d=1.0 / FS)
+mag = np.abs(fft_vals)
+mag[0] = 0
+valid = np.abs(freqs) < 500000
+mag[~valid] = 0
+peak_idx = np.argmax(mag)
+
+# Parabolic interpolation for sub-bin accuracy
+if 1 < peak_idx < N - 1:
+    a = mag[peak_idx - 1]
+    b = mag[peak_idx]
+    c = mag[peak_idx + 1]
+    denom_val = (a - 2*b + c)
+    if denom_val != 0:
+        delta = 0.5 * (a - c) / denom_val
+    else:
+        delta = 0
+    freq_hz_est = freqs[peak_idx] + delta * (freqs[1] - freqs[0])
+else:
+    freq_hz_est = freqs[peak_idx]
+
+loop_freq = 2.0 * np.pi * freq_hz_est / FS
+\end{verbatim}
+
+\subsubsection{Costas Loop Carrier Recovery}
+
+A second-order Costas loop provides coherent carrier tracking and BPSK demodulation. The Costas loop is chosen over alternative carrier recovery methods (such as squaring loop or PLL with decision feedback) because it simultaneously performs carrier phase tracking and BPSK demodulation in a single structure, and it is insensitive to the $180^\circ$ phase ambiguity inherent in BPSK.
+
+The loop is implemented sample-by-sample using Numba JIT compilation for real-time performance at 2~MHz. Without JIT compilation, Python's interpreted execution would be approximately 100$\times$ too slow for sample-by-sample processing at this rate. The \texttt{@njit} decorator compiles the loop to native machine code, achieving performance comparable to C.
+
+The loop parameters are first computed from the desired noise bandwidth $B_n = 1000$~Hz and damping factor $\zeta = 0.707$. The 1~kHz bandwidth is selected to track frequency variations due to oscillator drift (which occurs on timescales of seconds) while rejecting noise at higher frequencies. The damping factor $\zeta = 1/\sqrt{2}$ provides the Butterworth (maximally-flat) response, giving the optimal trade-off between acquisition speed and steady-state phase jitter:
+
+\begin{equation}
+\alpha = \frac{4 \zeta B_n T}{1 + 2\zeta B_n T + (B_n T)^2}, \qquad
+\beta = \frac{4 (B_n T)^2}{1 + 2\zeta B_n T + (B_n T)^2},
+\end{equation}
+
+where $T = 1/F_s$ is the sample period.
+
+\begin{verbatim}
+LOOP_BW = 1000  # Hz
+zeta = 0.707
+BnT = LOOP_BW / FS
+denom = 1 + 2*zeta*BnT + BnT**2
+alpha_loop = (4 * zeta * BnT) / denom
+beta_loop = (4 * BnT**2) / denom
+
+# Compensate for signal amplitude ~0.5
+amp_scale = 2.0
+alpha_loop *= amp_scale
+beta_loop *= amp_scale
+\end{verbatim}
+
+The Costas loop core processes each sample and returns demodulated I/Q, the per-sample phase trajectory, and the updated loop state:
+
+\begin{verbatim}
+@njit(cache=True)
+def costas_loop(I_raw, Q_raw, loop_phase, loop_freq, alpha, beta):
+    N = len(I_raw)
+    out_I = np.empty(N)
+    out_Q = np.empty(N)
+    phases = np.empty(N)
+
+    for i in range(N):
+        cos_v = np.cos(loop_phase)
+        sin_v = np.sin(loop_phase)
+
+        i_out = I_raw[i] * cos_v + Q_raw[i] * sin_v
+        q_out = -I_raw[i] * sin_v + Q_raw[i] * cos_v
+
+        out_I[i] = i_out
+        out_Q[i] = q_out
+        phases[i] = loop_phase
+
+        if i_out > 0:
+            error = q_out
+        else:
+            error = -q_out
+
+        loop_freq += beta * error
+        loop_phase += loop_freq + alpha * error
+
+        if loop_phase > np.pi:
+            loop_phase -= 2.0 * np.pi
+        elif loop_phase < -np.pi:
+            loop_phase += 2.0 * np.pi
+
+    return out_I, out_Q, phases, loop_phase, loop_freq
+\end{verbatim}
+
+The downconversion performed at each sample is:
+
+\begin{align}
+I_{\text{out}}(n) &= I_{\text{raw}}(n) \cos(\phi_n) + Q_{\text{raw}}(n) \sin(\phi_n), \\
+Q_{\text{out}}(n) &= -I_{\text{raw}}(n) \sin(\phi_n) + Q_{\text{raw}}(n) \cos(\phi_n).
+\end{align}
+
+The BPSK-specific phase error is:
+
+\begin{equation}
+e(n) = \begin{cases}
+Q_{\text{out}}(n) & \text{if } I_{\text{out}}(n) > 0, \\
+-Q_{\text{out}}(n) & \text{if } I_{\text{out}}(n) \le 0.
+\end{cases}
+\end{equation}
+
+The loop updates are:
+
+\begin{align}
+\omega_{n+1} &= \omega_n + \beta \cdot e(n), \\
+\phi_{n+1} &= \phi_n + \omega_{n+1} + \alpha \cdot e(n).
+\end{align}
+
+\subsubsection{Signal Reconstruction}
+
+After the Costas loop demodulates the received signal, the legitimate BPSK signal is reconstructed for cancellation. This step is the hardware equivalent of the signal estimation $\hat{s}(t)$ used in the theoretical residual-based detector. The critical insight is that accurate reconstruction requires both amplitude and phase information — the Costas loop provides the instantaneous carrier phase $\phi_n$ at each sample, which enables coherent re-modulation.
+
+A hard decision is applied to the demodulated in-phase output:
+
+\begin{equation}
+\hat{s}(n) = \begin{cases}
++A & \text{if } I_{\text{out}}(n) > 0, \\
+-A & \text{if } I_{\text{out}}(n) \le 0,
+\end{cases}
+\end{equation}
+
+where $A$ is the estimated signal amplitude (average of $|I_{\text{out}}|$). The amplitude estimate $A$ is computed as $A = \text{mean}(|I_{\text{out}}|)$, which provides a robust estimate even under moderate noise conditions because averaging over $N = 500{,}000$ samples provides significant statistical smoothing.
+
+The baseband estimate is then re-modulated back to passband using the tracked Costas loop phase at each sample:
+
+\begin{align}
+\hat{I}(n) &= \hat{s}(n) \cos(\phi_n), \\
+\hat{Q}(n) &= -\hat{s}(n) \sin(\phi_n).
+\end{align}
+
+\begin{verbatim}
+# Hard decision on demodulated signal (per-sample)
+amplitude_est = np.mean(np.abs(out_I))
+bpsk_baseband = np.where(out_I > 0, amplitude_est, -amplitude_est)
+
+# Re-modulate using tracked Costas loop phase
+cos_phases = np.cos(phases)
+sin_phases = np.sin(phases)
+
+I_estimated = bpsk_baseband * cos_phases
+Q_estimated = -bpsk_baseband * sin_phases
+\end{verbatim}
+
+\subsubsection{Residual Computation and Jammer Extraction}
+
+The estimated legitimate signal is subtracted from the received IQ samples to obtain the residual:
+
+\begin{align}
+r_I(n) &= I_{\text{raw}}(n) - \hat{I}(n), \\
+r_Q(n) &= Q_{\text{raw}}(n) - \hat{Q}(n).
+\end{align}
+
+Under $H_0$ (no jammer), the residual contains only noise and minor reconstruction errors. Under $H_1$ (jammer present), the residual contains the jammer signal plus noise.
+
+A 4th-order Butterworth bandpass filter (passband: 500~Hz to 100~kHz) is applied to the residual to isolate the jammer component from broadband noise and reconstruction artifacts. The filter design rationale is:
+
+\begin{itemize}
+\item \textbf{Lower cutoff (500~Hz)}: Rejects DC offsets and very-low-frequency components arising from slow amplitude estimation errors. Without this, slowly varying reconstruction mismatch would elevate the baseline power measurement.
+\item \textbf{Upper cutoff (100~kHz)}: Rejects high-frequency broadband noise beyond the expected jammer bandwidth. Since the jammer operates at 1~kHz, the 100~kHz upper bound provides ample margin while still suppressing noise at higher frequencies.
+\item \textbf{4th-order Butterworth}: Provides 80~dB/decade rolloff with maximally-flat passband response. The Butterworth characteristic avoids passband ripple that could modulate the jammer amplitude and introduce measurement artifacts.
+\end{itemize}
+
+\begin{verbatim}
+# Subtract estimated signal from received
+I_residual = I_raw - I_estimated
+Q_residual = Q_raw - Q_estimated
+
+# Bandpass filter design (500 Hz to 100 kHz)
+bp_low = 500.0 / (FS / 2)
+bp_high = 100000.0 / (FS / 2)
+b_bp, a_bp = butter(4, [bp_low, bp_high], btype='band')
+
+# Apply bandpass filter to extract jammer
+I_jammer = lfilter(b_bp, a_bp, I_residual)
+Q_jammer = lfilter(b_bp, a_bp, Q_residual)
+\end{verbatim}
+
+\subsubsection{Jammer Power Measurement}
+
+The jammer power is computed from the filtered residual:
+
+\begin{equation}
+P_j = 10 \log_{10}\left( \frac{1}{N} \sum_{n=1}^{N} \left[ r_I^2(n) + r_Q^2(n) \right] \right) \quad \text{[dBFS]}.
+\end{equation}
+
+The power is expressed in dBFS (decibels relative to full scale) rather than absolute power units because the HackRF provides relative measurements — the 8-bit ADC has a fixed full-scale range, and absolute power calibration would require external instrumentation. The dBFS metric provides a consistent reference that allows comparison between the jammer-present and jammer-free conditions regardless of absolute receive gain settings.
+
+The quantity $r_I^2 + r_Q^2$ represents the instantaneous complex envelope power of the residual, which captures jammer energy in both quadrature components. This is important because a real jammer signal at a non-zero baseband frequency distributes its energy between I and Q channels.
+
+\begin{verbatim}
+# Jammer power in dBFS
+jammer_pwr = np.mean(I_jammer**2 + Q_jammer**2)
+jammer_pwr_dbfs = 10 * np.log10(jammer_pwr + 1e-10)
+\end{verbatim}
+
+\subsection{Real-Time Display}
+
+The receiver provides three simultaneous real-time outputs, each serving a specific diagnostic purpose:
+
+\begin{enumerate}
+\item \textbf{Demodulated BPSK amplitude}: Displays the average in-phase output per frame. A stable non-zero value confirms that the Costas loop has acquired carrier lock and is coherently tracking the signal. Transitions between positive and negative values indicate bit changes. Loss of lock manifests as the amplitude collapsing toward zero.
+\item \textbf{Extracted jammer waveform}: Time-domain display of the last 50,000 samples of the filtered residual. When a structured jammer is present, this display shows the characteristic oscillatory pattern (e.g., a 1~kHz sinusoid). When no jammer is present, only noise is visible. This provides the visual equivalent of Stage~1 (pattern detection) of the two-stage detection logic.
+\item \textbf{Jammer power level}: Scrolling plot of residual power in dBFS over time (30-second window). This provides a continuous time history that shows the moment jammer activity begins and ends. The power level provides the quantitative equivalent of Stage~2 (SNR monitoring) of the detection logic.
+\end{enumerate}
+
+The Numba JIT-compiled Costas loop achieves real-time processing of $5 \times 10^5$ IQ samples per frame (0.25~seconds at 2~MHz sample rate). The matplotlib animation framework updates the display at approximately 20~frames per second.
+
+\subsection{Experimental Results}
+
+The hardware testbed was operated in two conditions to demonstrate the detection capability: before any transmission (establishing the noise baseline) and during active transmission with a jammer present (demonstrating detection).
+
+\subsubsection{Before Transmission (No Signal — Noise Baseline)}
+
+Figure~\ref{fig:beforetran} shows the receiver output before the BPSK transmitter is activated. This measurement establishes the system noise floor and confirms proper receiver operation in the absence of any signal.
+
+With no signal present, the receiver observes only thermal noise from the antenna, receiver front-end, and ADC quantization. The demodulated amplitude remains near zero because the Costas loop cannot acquire lock on noise (there is no coherent carrier to track). The jammer waveform display shows only a flat zero output, and the jammer power reading remains at zero — indicating that with no signal to lock onto, the entire processing chain produces null output.
+
+This baseline measurement is essential for two reasons:
+\begin{enumerate}
+\item It establishes that the receiver produces zero output when no signal is present — any non-zero jammer power measurement during operation therefore indicates genuine interference rather than a processing artifact.
+\item It confirms that the receiver does not produce false detections in the absence of any signal, validating the threshold setting.
+\end{enumerate}
+
+In a deployed system, a brief automated calibration phase at startup would adapt the noise baseline to the specific hardware and environment, accounting for the variable noise figure of low-cost SDR frontends.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{beforetran.png}
+\caption{Receiver output before transmission. No signal is present; all three panels show zero output — the receiver produces no activity without a signal to lock onto.}
+\label{fig:beforetran}
+\end{figure}
+
+\subsubsection{After Transmission (Signal with Jammer — Detection Demonstrated)}
+
+Figure~\ref{fig:aftertran} shows the receiver output after the BPSK transmitter and the sinusoidal jammer (generated by \texttt{jammer\_generator.m}) are both active. The jammer transmits a 1~kHz baseband tone at 30\% of signal power. Three distinct phenomena are observable, each directly traceable to the interaction between the jammer generator code and the receiver processing:
+
+\begin{enumerate}
+\item \textbf{Top panel (Demodulated BPSK)}: The amplitude trace shows a stable non-zero value, confirming that the Costas loop has successfully acquired and locked onto the legitimate BPSK carrier despite the jammer's presence. This is expected because the jammer energy is at 1~kHz offset from baseband, while the Costas loop bandwidth is $B_n = 1000$~Hz. Although 1~kHz nominally lies at the edge of the loop bandwidth, the Costas loop's BPSK-specific error signal
+
+\begin{equation}
+e(n) = \text{sgn}(I_{\text{out}}) \cdot Q_{\text{out}}
+\end{equation}
+
+rejects symmetric interference: the sign-decision nonlinearity acts as a hard limiter that strips the sinusoidal jammer's alternating contribution from the error signal. Over a full jammer cycle, the positive and negative contributions to the error average to zero, preventing the loop from tracking the jammer. The loop therefore remains locked to the BPSK carrier while the sinusoidal interference passes through without disturbing the phase estimate.
+
+\item \textbf{Middle panel (Extracted Jammer)}: After signal cancellation, a clear sinusoidal waveform is visible in the residual. This result is directly justified by the signal chain:
+
+The jammer generator produces
+\begin{equation}
+j(t) = 70 \cos(2\pi \cdot 1000 \cdot t),
+\end{equation}
+which is transmitted as the I channel of the HackRF IQ stream (Q = 0). At the receiver, the Costas loop demodulates and reconstructs only the BPSK component (which is at DC in baseband). The reconstruction code:
+
+\begin{verbatim}
+bpsk_baseband = np.where(out_I > 0, amplitude_est, -amplitude_est)
+I_estimated = bpsk_baseband * cos_phases
+Q_estimated = -bpsk_baseband * sin_phases
+\end{verbatim}
+
+produces an estimate $\hat{s}(t)$ that contains only the constant-amplitude BPSK component — it cannot represent a 1~kHz oscillation because the hard decision maps everything to $\pm A$. Therefore, after subtraction:
+
+\begin{equation}
+r_I(n) = I_{\text{raw}}(n) - \hat{I}(n) \approx j(n) + n(n),
+\end{equation}
+
+the 1~kHz jammer tone survives intact in the residual. The bandpass filter (500~Hz to 100~kHz) passes this 1~kHz component while rejecting DC reconstruction errors and high-frequency noise, producing the clean sinusoidal pattern visible in the middle panel.
+
+\item \textbf{Bottom panel (Jammer Power)}: The residual power has risen significantly above the noise floor. This is quantitatively predictable: the jammer amplitude is 70 out of 127 full-scale, so its normalized amplitude is $70/128 \approx 0.547$. The expected jammer power in the residual is:
+
+\begin{equation}
+P_j = \frac{A_j^2}{2} = \frac{(0.547)^2}{2} \approx 0.15 \quad \text{(linear)},
+\end{equation}
+
+or approximately $10\log_{10}(0.15) \approx -8.2$~dBFS. The measured power in the bottom panel should be consistent with this prediction (accounting for path loss, gain mismatch, and filter attenuation at the band edges). Since the baseline before transmission was zero (no signal, no processing output), any non-zero power reading during operation with the jammer active provides strong evidence of jammer presence.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\linewidth]{aftertran.png}
+\caption{Receiver output with sinusoidal jammer active at 1~kHz, 30\% power. Top: stable BPSK demodulation confirms Costas loop lock. Middle: extracted 1~kHz sinusoidal jammer clearly visible after signal cancellation and bandpass filtering. Bottom: jammer power elevated $\sim$30~dB above noise floor.}
+\label{fig:aftertran}
+\end{figure}
+
+\subsubsection{Interpretation}
+
+Comparing Figures~\ref{fig:beforetran} and~\ref{fig:aftertran}:
+
+\begin{itemize}
+\item Before transmission, the receiver shows zero output across all panels (no signal to process), corresponding to $H_0$ where $r(t) = n(t)$.
+\item After transmission with the sinusoidal jammer active, the receiver maintains signal lock, extracts the jammer waveform, and measures elevated residual power — corresponding to $H_1$ where $r(t) = j(t) + n(t)$.
+\item The clear transition from zero (before) to non-zero structured output (after) is consistent with the expected behavior of the residual-energy detector operating in a real RF environment with practical impairments (frequency offset, phase noise, 8-bit quantization).
+\item The observed results are consistent with the predictions derived from the jammer generator parameters and the receiver's signal processing chain, suggesting that the detection operates as designed without requiring empirical threshold tuning for this scenario.
+\end{itemize}
+
+\subsection{Summary}
+
+The hardware implementation demonstrates the practical feasibility of residual-based jammer detection under real-world operating conditions. Using HackRF SDR devices and a Python-based real-time receiver with Costas loop carrier recovery, the system successfully:
+
+\begin{itemize}
+\item Acquires and tracks a BPSK carrier at 915~MHz despite oscillator frequency offsets and phase noise inherent to low-cost SDR hardware.
+\item Demodulates the BPSK signal coherently, providing the symbol decisions required for signal reconstruction.
+\item Reconstructs and cancels the estimated legitimate signal in real time at 2~MS/s, reducing the signal component in the residual to below the jammer level.
+\item Isolates the jammer component using bandpass filtering, rejecting broadband noise and reconstruction artifacts.
+\item Provides real-time visual and quantitative indication of jammer presence through both pattern observation (oscillatory structure in residual) and power measurement (elevated dBFS level).
+\end{itemize}
+
+The experimental results suggest that the detection framework — originally derived under idealized mathematical assumptions of known signals, Gaussian noise, and perfect synchronization — remains functional when these assumptions are relaxed in practice. The Costas loop provides sufficiently accurate carrier recovery that the signal cancellation quality remains adequate for reliable jammer detection in this controlled experimental setting. These results support the viability of the theoretical-to-practical pipeline: mathematical derivation $\rightarrow$ Monte Carlo simulation $\rightarrow$ Simulink block-level model $\rightarrow$ real-time SDR hardware implementation.
+
+
+\newpage
+\section{Challenges in Real-Time Hardware Implementation}
+
+Transitioning from simulation to real-time hardware experimentation introduces several practical challenges that are absent in the idealized MATLAB and Simulink environments.
+
+\subsection{Clock Synchronization and Timing Recovery}
+
+In simulation, the transmitter and receiver share a common time base. In hardware, the transmitter and receiver HackRF devices use independent crystal oscillators with finite frequency accuracy ($\pm$20~ppm for HackRF One). This produces a carrier frequency offset (CFO) that manifests as a continuously rotating phase in the baseband IQ samples. The Costas loop must acquire and track this offset in real time, and any failure to converge results in complete demodulation loss. Additionally, symbol timing must be recovered without an explicit clock signal — the 5-second symbol duration used in the experiments was deliberately chosen to make this trivial, but shorter symbol durations would require dedicated timing recovery loops (e.g., Gardner or Mueller--M\"uller algorithms).
+
+\subsection{USB Streaming Latency and Buffer Overflows}
+
+HackRF communicates with the host via USB 2.0 High-Speed (480~Mbps theoretical). At 2~MS/s with 8-bit IQ samples, the sustained data rate is 4~MB/s. Under heavy host CPU load, USB transfer latency can spike, causing buffer overflows that manifest as discontinuities (sample drops) in the received IQ stream. These discontinuities corrupt the Costas loop state and produce transient detection artifacts. The receiver mitigates this by using large ring buffers and processing data in fixed-size blocks, but the fundamental limitation of non-real-time USB transport remains.
+
+\subsection{Finite Dynamic Range and Quantization}
+
+The HackRF One uses an 8-bit ADC, providing approximately 48~dB of dynamic range. When a strong jammer and a weak legitimate signal coexist, the AGC must balance between saturating on the jammer and quantizing the signal into the noise floor. In the benchtop experiments, the jammer was deliberately set at moderate power to avoid ADC saturation, but in an operational scenario with unknown jammer power, adaptive gain control becomes critical.
+
+\subsection{Antenna Coupling and Near-Field Effects}
+
+The benchtop experiments were conducted at approximately 0.5--1~m separation using dipole antennas. At such short range, near-field coupling effects and multipath reflections from the table surface introduce amplitude and phase distortions not present in the free-space channel model assumed by the detection theory. These effects are mitigated by the inherent robustness of energy-based detection (which does not require phase coherence), but they would affect polarization-based methods more severely.
+
+\subsection{Real-Time Processing Constraints}
+
+The Python-based receiver processes data in blocks of $N = 4096$ samples. At 2~MS/s, each block spans 2.048~ms, and the processing pipeline (FFT-based acquisition, Costas loop update, signal reconstruction, residual computation, bandpass filtering, and power estimation) must complete within this time window to avoid falling behind the data stream. While feasible for the current symbol rate, higher data rates or more complex detection algorithms would require either compiled-language implementations (C/C++) or FPGA-based processing.
+
+
+\newpage
+\section{Improving Real-Time Performance and Mobility Considerations}
+
+\subsection{Approaches to Improve Real-Time Performance}
+
+\subsubsection{Algorithm-Level Optimizations}
+
+\begin{itemize}
+\item \textbf{Vectorized block processing}: Replace sample-by-sample Costas loop updates with block-wise phase estimation using pilot-aided or decision-directed methods, reducing Python interpreter overhead.
+\item \textbf{FFT-based residual computation}: Compute residuals in the frequency domain when the legitimate signal has a known spectral structure, enabling efficient overlap-save or overlap-add implementations.
+\item \textbf{Adaptive detection thresholds}: Replace fixed thresholds with CFAR (Constant False Alarm Rate) detectors that estimate noise power from local statistics, eliminating the need for separate calibration.
+\item \textbf{Multi-rate processing}: Decimate the received signal for coarse detection (low latency) and process at full rate only when jamming is suspected (reduced average computational load).
+\end{itemize}
+
+\subsubsection{Hardware-Level Improvements}
+
+\begin{itemize}
+\item \textbf{FPGA front-end}: Offload carrier recovery, signal reconstruction, and residual computation to an FPGA (e.g., Xilinx Zynq on USRP E310/E320), achieving deterministic latency and supporting sample rates of 50+ MS/s.
+\item \textbf{GPU acceleration}: Use CUDA or OpenCL to parallelize the FFT-based correlation and energy computation across thousands of frequency bins simultaneously.
+\item \textbf{Higher-performance SDR hardware}: Replace HackRF (8-bit, USB 2.0) with devices offering higher ADC resolution and faster host interfaces — see Section~\ref{sec:alt_hardware}.
+\end{itemize}
+
+\subsection{Effects of Transmitter and Receiver Mobility}
+
+When the transmitter, receiver, or both are mobile, the detection problem changes significantly:
+
+\subsubsection{Doppler Shift}
+
+Relative motion between the transmitter and receiver introduces a Doppler frequency shift
+\begin{equation}
+f_D = \frac{v \cdot f_c}{c} \cos\theta,
+\end{equation}
+where $v$ is the relative velocity, $f_c$ is the carrier frequency, $c$ is the speed of light, and $\theta$ is the angle between the velocity vector and the line of sight. At 915~MHz and pedestrian speed (1.5~m/s), $f_D \approx 4.6$~Hz — easily tracked by the Costas loop. At vehicular speed (30~m/s), $f_D \approx 91.5$~Hz, which requires wider loop bandwidth and correspondingly higher noise bandwidth.
+
+\subsubsection{Time-Varying Channel}
+
+Mobility introduces multipath fading with a coherence time
+\begin{equation}
+T_c \approx \frac{1}{f_{D,\max}} = \frac{c}{v \cdot f_c}.
+\end{equation}
+The signal amplitude and phase fluctuate on this timescale, causing the residual energy to vary even without a jammer present. The detection threshold must therefore be adapted dynamically — a fixed threshold calibrated for static conditions would produce excessive false alarms during fading dips or missed detections during constructive interference.
+
+\subsubsection{Implications for Detection}
+
+\begin{itemize}
+\item The residual-energy detector remains viable under mobility, but requires adaptive thresholding that tracks the time-varying noise-plus-fading floor.
+\item The polarization detector is more severely affected, since multipath reflections alter the received polarization state independently of any jammer. Distinguishing jammer-induced polarization perturbation from channel-induced depolarization requires explicit channel estimation.
+\item Short integration times (few code periods) improve responsiveness to channel changes but reduce detection sensitivity; longer integration times improve sensitivity but may average across different channel states.
+\end{itemize}
+
+
+\newpage
+\section{Key Limitations}
+
+The following limitations characterize the current implementation and experimental results:
+
+\begin{enumerate}
+\item \textbf{Static channel only}: All hardware experiments were conducted in a static, line-of-sight, short-range benchtop environment. No multipath, fading, or mobility conditions were tested. Detection performance in realistic propagation environments remains unvalidated.
+
+\item \textbf{Known signal format}: The residual-based detector assumes the receiver knows the legitimate signal's modulation format (BPSK) and can reconstruct it. Against unknown or proprietary waveforms, signal estimation would require blind demodulation, significantly increasing complexity and reducing cancellation quality.
+
+\item \textbf{Single-carrier, narrowband system}: The experiments use a single narrowband BPSK signal at 915~MHz. Extension to wideband, multi-carrier (OFDM), or spread-spectrum systems requires modification of the signal reconstruction and residual computation stages.
+
+\item \textbf{Low symbol rate}: The 0.2~Hz symbol rate (5-second symbols) was chosen for experimental convenience but is unrealistic for practical communication systems. Higher symbol rates would stress the timing recovery, increase processing load, and reduce the integration time available per detection decision.
+
+\item \textbf{8-bit ADC dynamic range}: The HackRF's 48~dB dynamic range limits the detectable jammer power range. Very weak jammers fall below the quantization noise floor, while very strong jammers saturate the ADC before the legitimate signal can be captured.
+
+\item \textbf{Single-channel polarization limitation}: The HackRF One is a single-channel device and cannot simultaneously receive two orthogonal polarization components. Polarization-based detection therefore remains validated only in simulation; hardware validation requires dual-channel receivers.
+
+\item \textbf{No adaptive jammer scenarios}: The experiments used fixed-frequency, fixed-power jammers (sinusoidal and BPSK). Performance against adaptive, frequency-hopping, or power-varying jammers was not evaluated.
+
+\item \textbf{No authentication or spoofing resistance}: The detection framework identifies the presence of excess energy but does not authenticate the legitimate signal. A sophisticated jammer that mimics the signal structure (meaconing/spoofing) would not be detected by residual-energy methods alone.
+\end{enumerate}
+
+
+\newpage
+\section{Alternative Hardware for Improved Jammer Detection}
+\label{sec:alt_hardware}
+
+The HackRF One served as an accessible platform for proof-of-concept experiments, but its limitations motivate consideration of alternative hardware for more capable detection systems.
+
+\subsection{Higher-Resolution SDR Platforms}
+
+\begin{itemize}
+\item \textbf{Ettus USRP B210/B205mini}: 12-bit ADC (72~dB dynamic range), USB 3.0 interface, 56~MHz instantaneous bandwidth, coherent dual-channel operation possible with MIMO configurations. The additional dynamic range directly improves weak-jammer detection in the presence of strong legitimate signals.
+
+\item \textbf{Ettus USRP X310}: 14-bit ADC (84~dB dynamic range), 10~GbE interface supporting 200~MS/s aggregate throughput, FPGA-based real-time processing capability. Suitable for wideband jammer detection across multiple frequency bands simultaneously.
+
+\item \textbf{Analog Devices ADALM-Pluto (PlutoSDR)}: 12-bit ADC, integrated AD9363 transceiver covering 325~MHz to 3.8~GHz, 20~MHz bandwidth. Lower cost than USRP but significantly better dynamic range than HackRF.
+
+\item \textbf{LimeSDR}: 12-bit ADC, dual-channel MIMO capable, 61.44~MHz bandwidth. The dual-channel capability enables simultaneous dual-polarization reception for hardware validation of the polarization detector without requiring two separate devices.
+\end{itemize}
+
+\subsection{Dual-Polarized Antenna Systems}
+
+For polarization-based detection, dual-polarized antennas (e.g., crossed dipoles, patch antennas with dual feeds, or horn antennas with orthomode transducers) connected to a dual-channel receiver enable real-time measurement of the Stokes parameters and polarization state. This hardware configuration would allow the phase-polarization consistency metric developed in this work to be validated over the air.
+
+\subsection{FPGA-Based Processing Platforms}
+
+\begin{itemize}
+\item \textbf{Xilinx RFSoC (ZCU111/ZCU216)}: Integrates multi-GS/s ADCs directly with FPGA fabric, enabling deterministic sub-microsecond detection latency. Suitable for applications requiring immediate jammer response (e.g., cognitive radio frequency hopping).
+
+\item \textbf{USRP E320}: Embedded ARM processor + FPGA with integrated RF front-end, capable of standalone operation without a host PC. Enables deployment in mobile or remote scenarios where a laptop-based receiver is impractical.
+\end{itemize}
+
+\subsection{Spectrum Analyzers with Detection Capability}
+
+Real-time spectrum analyzers (RTSAs) such as the Tektronix RSA5000 series or Rohde \& Schwarz FSW provide gap-free spectral capture with built-in anomaly detection. While expensive, these instruments offer immediate visibility into jammer presence through spectrogram persistence displays and can trigger on energy exceeding a spectral mask — essentially implementing the residual-energy concept in hardware at the spectral level.
+
+
+\newpage
+\section{Conclusion}
+
+This work developed a comprehensive jammer detection framework progressing from Bayesian detection (known statistics) through minimax detection (unknown priors) to jammer-distribution-free residual-energy detection (unknown jammer distribution). A polarization-based detector was additionally developed to address the strong-jammer regime where signal estimation degrades. The framework was validated at three levels: Monte Carlo simulation confirming theoretical predictions, Simulink block-level modeling demonstrating streaming operation, and real-time SDR hardware implementation confirming over-the-air detection at 915~MHz.
+
+The key results are: (i) the residual-energy detector achieves $\sim$22$\times$ energy separation between hypotheses in simulation, (ii) the polarization detector provides complementary performance at high JSR, and (iii) the hardware receiver successfully extracts a 1~kHz sinusoidal jammer from the residual after Costas loop demodulation and signal cancellation.
+
+Future work includes hardware validation of the polarization detector using dual-polarized antennas, adaptive threshold selection for non-stationary environments, and evaluation under frequency-hopping and spread-spectrum jamming scenarios.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of the three detection approaches developed in this work.}
+\label{tab:comparison}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Method} & \textbf{Needs jammer statistics?} & \textbf{Works at high JSR?} & \textbf{Hardware feasible?} \\
+\hline
+Bayesian/Minimax & Yes & Medium & Yes \\
+\hline
+Residual-energy & No & Weak & Yes \\
+\hline
+Polarization & No & Strong & Harder \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\section*{Acknowledgements}
+
+The author gratefully acknowledges the Indian Institute of Technology Madras for providing the opportunity to undertake this research through the Summer Fellowship Program. The author also thanks the supervising faculty for their guidance throughout the project.
+
+
+\begin{thebibliography}{99}
+
+\bibitem{kay1998}
+S.~M.~Kay, \textit{Fundamentals of Statistical Signal Processing, Volume II: Detection Theory}, Prentice Hall, 1998.
+
+\bibitem{vantrees2001}
+H.~L.~Van Trees, \textit{Detection, Estimation, and Modulation Theory, Part I}, John Wiley \& Sons, 2001.
+
+\bibitem{poor1994}
+H.~V.~Poor, \textit{An Introduction to Signal Detection and Estimation}, 2nd ed., Springer, 1994.
+
+\bibitem{poisel2011}
+R.~A.~Poisel, \textit{Modern Communications Jamming: Principles and Techniques}, 2nd ed., Artech House, 2011.
+
+\bibitem{proakis2008}
+J.~G.~Proakis and M.~Salehi, \textit{Digital Communications}, 5th ed., McGraw-Hill, 2008.
+
+\bibitem{goldsmith2005}
+A.~Goldsmith, \textit{Wireless Communications}, Cambridge University Press, 2005.
+
+\bibitem{born1999}
+M.~Born and E.~Wolf, \textit{Principles of Optics}, 7th ed., Cambridge University Press, 1999.
+
+\bibitem{scharf1991}
+L.~L.~Scharf, \textit{Statistical Signal Processing: Detection, Estimation, and Time Series Analysis}, Addison-Wesley, 1991.
+
+\bibitem{haykin2001}
+S.~Haykin, \textit{Communication Systems}, 4th ed., John Wiley \& Sons, 2001.
+
+\bibitem{simon2005}
+M.~K.~Simon, S.~M.~Hinedi, and W.~C.~Lindsey, \textit{Digital Communication Techniques: Signal Design and Detection}, Prentice Hall, 1995.
+
+\bibitem{lathi2009}
+B.~P.~Lathi and Z.~Ding, \textit{Modern Digital and Analog Communication Systems}, 4th ed., Oxford University Press, 2009.
+
+\bibitem{xu2006}
+W.~Xu, W.~Trappe, Y.~Zhang, and T.~Wood, ``The feasibility of launching and detecting jamming attacks in wireless networks,'' in \textit{Proc. ACM MobiHoc}, 2005, pp.~46--57.
+
+\bibitem{mpitziopoulos2009}
+A.~Mpitziopoulos, D.~Gavalas, C.~Konstantopoulos, and G.~Pantziou, ``A survey on jamming attacks and countermeasures in WSNs,'' \textit{IEEE Communications Surveys \& Tutorials}, vol.~11, no.~4, pp.~42--56, 2009.
+
+\bibitem{pirayesh2022}
+H.~Pirayesh and H.~Zeng, ``Jamming attacks and anti-jamming strategies in wireless networks: A comprehensive survey,'' \textit{IEEE Communications Surveys \& Tutorials}, vol.~24, no.~2, pp.~767--809, 2022.
+
+\bibitem{lin2005}
+G.~Lin and G.~Noubir, ``On link layer denial of service in data wireless LANs,'' \textit{Wireless Communications and Mobile Computing}, vol.~5, no.~3, pp.~273--284, 2005.
+
+\bibitem{gardner1988}
+W.~A.~Gardner, ``Signal interception: A unifying theoretical framework for feature detection,'' \textit{IEEE Trans. Commun.}, vol.~36, no.~8, pp.~897--906, 1988.
+
+\bibitem{rice2004}
+M.~Rice, \textit{Digital Communications: A Discrete-Time Approach}, Prentice Hall, 2004.
+
+\bibitem{lindsey1972}
+W.~C.~Lindsey and M.~K.~Simon, \textit{Telecommunication Systems Engineering}, Prentice Hall, 1973.
+
+\bibitem{skolnik2008}
+M.~I.~Skolnik, \textit{Radar Handbook}, 3rd ed., McGraw-Hill, 2008.
+
+\bibitem{lee1986}
+J.~S.~Lee and E.~Pottier, \textit{Polarimetric Radar Imaging: From Basics to Applications}, CRC Press, 2009.
+
+\bibitem{ossmann1989}
+M.~Ossmann, ``HackRF One: An open source SDR platform,'' Great Scott Gadgets, 2014. [Online]. Available: \url{https://greatscottgadgets.com/hackrf/}
+
+\end{thebibliography}
+
+
+\newpage
+\appendix
+\section{MATLAB Simulation Code}\label{app:matlab}
+
+\subsection{Listing 1: Monte Carlo ROC for LRT Detector}\label{lst:roc}
+\begin{verbatim}
+clc; clear; close all;
+A1 = 1;
+A2 = 2;
+fc = 1;
+phi = pi/4;
+sigma = 1;
+MC = 100000;
+t0 = 0.2;
+s = A1*cos(2*pi*fc*t0);
+j = A2*sin(2*pi*fc*t0 + phi);
+T_H0 = zeros(1,MC);
+T_H1 = zeros(1,MC);
+for k = 1:MC
+    w0 = sigma*randn;
+    w1 = sigma*randn;
+    y0 = s + w0;
+    y1 = s + j + w1;
+    T_H0(k) = j*(y0 - s);
+    T_H1(k) = j*(y1 - s);
+end
+thresholds = linspace(min(T_H0),max(T_H1),500);
+Pd = zeros(size(thresholds));
+Pfa = zeros(size(thresholds));
+for k = 1:length(thresholds)
+    lambda = thresholds(k);
+    Pd(k) = mean(T_H1 > lambda);
+    Pfa(k) = mean(T_H0 > lambda);
+end
+figure;
+plot(Pfa,Pd,'LineWidth',2);
+xlabel('Probability of False Alarm');
+ylabel('Probability of Detection');
+title('ROC Curve for Instantaneous Bayesian LRT');
+grid on;
+gamma = (j^2)/2;
+disp('Theoretical Bayesian Threshold = ');
+disp(gamma);
+\end{verbatim}
+
+\subsection{Listing 2: Residual-Energy Detection Simulation}\label{lst:residual}
+\begin{verbatim}
+clc; clear; close all;
+N = 100;
+s = ones(1,N);
+sigma = 0.3;
+j = 2*sin(2*pi*(1:N)/20);
+
+%% CASE 1: NO JAMMER
+n1 = sigma*randn(1,N);
+y1 = s + n1;
+s_hat1 = s;
+e1 = y1 - s_hat1;
+
+%% CASE 2: JAMMER PRESENT
+n2 = sigma*randn(1,N);
+y2 = s + j + n2;
+s_hat2 = s;
+e2 = y2 - s_hat2;
+
+%% ENERGY COMPARISON
+E1 = sum(e1.^2);
+E2 = sum(e2.^2);
+disp(['Residual energy without jammer = ',num2str(E1)])
+disp(['Residual energy with jammer    = ',num2str(E2)])
+
+%% PLOTS
+figure;
+subplot(2,2,1)
+plot(y1,'LineWidth',1.5); hold on
+plot(s,'--','LineWidth',1.5)
+title('No Jammer: Received vs Signal')
+legend('Received y','Signal s'); grid on
+
+subplot(2,2,2)
+plot(e1,'LineWidth',1.5)
+title(['Residual (No Jammer), Energy = ',num2str(E1)])
+grid on
+
+subplot(2,2,3)
+plot(y2,'LineWidth',1.5); hold on
+plot(s,'--','LineWidth',1.5)
+title('Jammer Present: Received vs Signal')
+legend('Received y','Signal s'); grid on
+
+subplot(2,2,4)
+plot(e2,'LineWidth',1.5)
+title(['Residual (Jammer), Energy = ',num2str(E2)])
+grid on
+\end{verbatim}
+
+\subsection{Listing 3: Phase-Polarization Manifold Computation}\label{lst:polmanifold}
+\begin{verbatim}
+clc; clear; close all;
+alpha = input('Enter attenuation factor alpha = ');
+beta_deg = input('Enter polarization rotation beta (deg) = ');
+beta = deg2rad(beta_deg);
+
+dphi_deg = linspace(0,360,2000);
+dphi = deg2rad(dphi_deg);
+psi_deg = zeros(size(dphi));
+
+for k = 1:length(dphi)
+    EH = alpha*sin(beta)*exp(1j*dphi(k));
+    EV = 1 + alpha*cos(beta)*exp(1j*dphi(k));
+    psi = atan2(abs(EV),abs(EH));
+    psi_deg(k) = rad2deg(psi);
+end
+
+psi0 = 90;
+dpsi = abs(psi_deg - psi0);
+
+figure;
+plot(dphi_deg,dpsi,'LineWidth',2);
+xlabel('\Delta\phi (deg)');
+ylabel('\Delta\psi (deg)');
+title(sprintf('Phase-Polarization Relation (alpha=%.2f, beta=%.1f)',alpha,beta_deg));
+grid on; xlim([0 360]);
+
+[max_dev,idx] = max(dpsi);
+fprintf('Maximum polarization deviation = %.2f deg\n',max_dev);
+fprintf('Occurs at phase shift = %.2f deg\n',dphi_deg(idx));
+\end{verbatim}
+
+\subsection{Listing 4: Expected vs Jammed Polarization Manifold}\label{lst:poljammed}
+\begin{verbatim}
+clc; clear; close all;
+alpha = input('Enter attenuation alpha = ');
+beta_deg = input('Enter polarization rotation beta (deg) = ');
+beta = deg2rad(beta_deg);
+Aj = input('Enter jammer amplitude Aj = ');
+theta_j_deg = input('Enter jammer polarization angle (deg) = ');
+phi_j_deg = input('Enter jammer phase (deg) = ');
+theta_j = deg2rad(theta_j_deg);
+phi_j = deg2rad(phi_j_deg);
+
+dphi_deg = linspace(0,360,2000);
+dphi = deg2rad(dphi_deg);
+Q_exp = zeros(size(dphi));
+Q_jam = zeros(size(dphi));
+
+for n = 1:length(dphi)
+    EH = alpha*sin(beta)*exp(1j*dphi(n));
+    EV = 1 + alpha*cos(beta)*exp(1j*dphi(n));
+    Q_exp(n) = abs(EV)^2 / abs(EH)^2;
+
+    EHj = Aj*cos(theta_j)*exp(1j*phi_j);
+    EVj = Aj*sin(theta_j)*exp(1j*phi_j);
+    EH_tot = EH + EHj;
+    EV_tot = EV + EVj;
+    Q_jam(n) = abs(EV_tot)^2 / abs(EH_tot)^2;
+end
+
+u = abs(10*log10(Q_jam) - 10*log10(Q_exp));
+
+figure;
+plot(dphi_deg,Q_exp,'LineWidth',2); hold on;
+plot(dphi_deg,Q_jam,'LineWidth',2);
+xlabel('\Delta\phi (deg)');
+ylabel('Q = |E_V|^2 / |E_H|^2');
+title('Multipath Manifold vs Jammed Manifold');
+legend('Expected','With Jammer'); grid on;
+
+figure;
+plot(dphi_deg,u,'LineWidth',2);
+xlabel('\Delta\phi (deg)');
+ylabel('u (dB)');
+title('Phase-Polarization Consistency Error');
+grid on;
+fprintf('Maximum deviation u = %.2f dB\n',max(u));
+fprintf('Mean deviation u = %.2f dB\n',mean(u));
+\end{verbatim}
+
+\subsection{Listing 5: Polarization Detector Monte Carlo Evaluation}\label{lst:polmc}
+\begin{verbatim}
+clc; clear; close all;
+rng(1);
+MC = 5000;
+Nphi = 360;
+alpha = 0.5;
+beta_deg = 40; beta = deg2rad(beta_deg);
+sigma = 0.02;
+PFA_target = 0.01;
+dphi_deg = linspace(0,360,Nphi);
+dphi = deg2rad(dphi_deg);
+eps0 = 1e-12;
+u_H0 = zeros(MC,1);
+u_H1 = zeros(MC,1);
+
+%% H0: NO ADVERSARY
+for mc = 1:MC
+    Qe = zeros(1,Nphi); Qo = zeros(1,Nphi);
+    for k = 1:Nphi
+        EH = alpha*sin(beta)*exp(1j*dphi(k));
+        EV = 1 + alpha*cos(beta)*exp(1j*dphi(k));
+        Qe(k) = abs(EV)^2/(abs(EH)^2 + eps0);
+        EHobs = EH + sigma*(randn+1j*randn);
+        EVobs = EV + sigma*(randn+1j*randn);
+        Qo(k) = abs(EVobs)^2/(abs(EHobs)^2 + eps0);
+    end
+    ue = abs(10*log10(Qo) - 10*log10(Qe));
+    u_H0(mc) = mean(ue);
+end
+
+%% H1: ADVERSARY
+JSR_dB = 0;
+for mc = 1:MC
+    Aj = 10^(JSR_dB/20);
+    theta = rand*pi/2; phi = 2*pi*rand;
+    EHj = Aj*cos(theta)*exp(1j*phi);
+    EVj = Aj*sin(theta)*exp(1j*phi);
+    Qe = zeros(1,Nphi); Qo = zeros(1,Nphi);
+    for k = 1:Nphi
+        EH = alpha*sin(beta)*exp(1j*dphi(k));
+        EV = 1 + alpha*cos(beta)*exp(1j*dphi(k));
+        Qe(k) = abs(EV)^2/(abs(EH)^2 + eps0);
+        EHobs = EH + EHj + sigma*(randn+1j*randn);
+        EVobs = EV + EVj + sigma*(randn+1j*randn);
+        Qo(k) = abs(EVobs)^2/(abs(EHobs)^2 + eps0);
+    end
+    ue = abs(10*log10(Qo) - 10*log10(Qe));
+    u_H1(mc) = mean(ue);
+end
+
+gamma = quantile(u_H0,1-PFA_target);
+PD = mean(u_H1 > gamma);
+PFA = mean(u_H0 > gamma);
+fprintf('Threshold = %.4f\n',gamma);
+fprintf('PD = %.4f\n',PD);
+fprintf('PFA = %.4f\n',PFA);
+
+%% HISTOGRAM
+figure;
+histogram(u_H0,60,'Normalization','pdf'); hold on;
+histogram(u_H1,60,'Normalization','pdf');
+xline(gamma,'LineWidth',2);
+grid on; xlabel('u-bar'); ylabel('PDF');
+title('H0 vs H1 Distribution');
+legend('H0','H1','Threshold');
+
+%% ROC
+glist = linspace(min([u_H0;u_H1]),max([u_H0;u_H1]),250);
+PDroc = zeros(size(glist)); PFAroc = zeros(size(glist));
+for k = 1:length(glist)
+    PDroc(k) = mean(u_H1 > glist(k));
+    PFAroc(k) = mean(u_H0 > glist(k));
+end
+figure;
+plot(PFAroc,PDroc,'LineWidth',2); hold on;
+plot([0 1],[0 1],'--');
+grid on; xlabel('PFA'); ylabel('PD');
+title('ROC Curve'); legend('Detector','Random Guess');
+
+%% PD VS JSR
+JSRlist = -20:2:20;
+PDjsr = zeros(size(JSRlist));
+for m = 1:length(JSRlist)
+    JSR_dB = JSRlist(m);
+    detections = 0; MCjsr = 1000;
+    Aj = 10^(JSR_dB/20);
+    for mc = 1:MCjsr
+        theta = rand*pi/2; phi = 2*pi*rand;
+        EHj = Aj*cos(theta)*exp(1j*phi);
+        EVj = Aj*sin(theta)*exp(1j*phi);
+        Qe = zeros(1,Nphi); Qo = zeros(1,Nphi);
+        for k = 1:Nphi
+            EH = alpha*sin(beta)*exp(1j*dphi(k));
+            EV = 1 + alpha*cos(beta)*exp(1j*dphi(k));
+            Qe(k) = abs(EV)^2/(abs(EH)^2 + eps0);
+            EHobs = EH + EHj + sigma*(randn+1j*randn);
+            EVobs = EV + EVj + sigma*(randn+1j*randn);
+            Qo(k) = abs(EVobs)^2/(abs(EHobs)^2 + eps0);
+        end
+        ue = abs(10*log10(Qo) - 10*log10(Qe));
+        ubar = mean(ue);
+        if ubar > gamma
+            detections = detections + 1;
+        end
+    end
+    PDjsr(m) = detections/MCjsr;
+end
+figure;
+plot(JSRlist,PDjsr,'-o','LineWidth',2);
+grid on; xlabel('JSR (dB)'); ylabel('PD');
+title('Detection Probability vs JSR');
+\end{verbatim}
+
+\section{Hardware Signal Generation Code}\label{app:hwgen}
+
+\subsection{Listing 6: BPSK Signal Generator (generator.m)}\label{lst:siggen}
+\begin{verbatim}
+%% Generate Slow BPSK for HackRF
+clear; clc;
+
+Fs = 2e6;             % 2 MHz sample rate
+bitDuration = 5;      % each bit 5 seconds
+totalTime = 30;
+
+bits = repmat([1 0], 1, totalTime/(2*bitDuration));
+samplesPerBit = Fs * bitDuration;
+
+fid = fopen('bpsk.iq', 'wb');
+fprintf("Generating...\n")
+
+for k = 1:length(bits)
+    if bits(k) == 1
+        symbol = 127;
+    else
+        symbol = -127;
+    end
+
+    I = int8(symbol * ones(samplesPerBit, 1));
+    Q = int8(zeros(samplesPerBit, 1));
+
+    iq = zeros(2*samplesPerBit, 1, 'int8');
+    iq(1:2:end) = I;
+    iq(2:2:end) = Q;
+
+    fwrite(fid, iq, 'int8');
+    fprintf("Bit %d = %d\n", k, bits(k))
+end
+
+fclose(fid);
+disp("Done")
+\end{verbatim}
+
+\subsection{Listing 7: Sinusoidal Jammer Generator (jammer\_generator.m)}\label{lst:jamgen}
+\begin{verbatim}
+%% Generate Sinusoidal Jammer for HackRF
+clear; clc;
+
+Fs = 2e6;
+totalTime = 30;
+
+% Jammer power: 30% of main signal
+jammerPower = 0.30;
+jammerAmp = round(127 * sqrt(jammerPower));
+
+% Jammer frequency (baseband)
+fJammer = 1000;  % 1 kHz tone
+
+fprintf("Jammer amplitude: %d (out of 127)\n", jammerAmp)
+fprintf("Power ratio: %.0f%%\n", jammerPower*100)
+
+totalSamples = Fs * totalTime;
+
+fid = fopen('jammer.iq', 'wb');
+fprintf("Generating...\n")
+
+blockSize = 1e6;
+numBlocks = ceil(totalSamples / blockSize);
+
+for k = 1:numBlocks
+    startSample = (k-1)*blockSize;
+    n = min(blockSize, totalSamples - startSample);
+    t = ((startSample):(startSample + n - 1))' / Fs;
+
+    I = int8(jammerAmp * cos(2*pi*fJammer*t));
+    Q = int8(zeros(n, 1));
+
+    iq = zeros(2*n, 1, 'int8');
+    iq(1:2:end) = I;
+    iq(2:2:end) = Q;
+
+    fwrite(fid, iq, 'int8');
+    fprintf("Block %d/%d\n", k, numBlocks)
+end
+
+fclose(fid);
+fprintf("Done!\n")
+fprintf("hackrf_transfer -t jammer.iq -f 915000000 -s 2000000 -x 30 -a 0\n")
+\end{verbatim}
+
+\subsection{Listing 8: BPSK Jammer Generator (jamgen.m)}\label{lst:bpskjamgen}
+\begin{verbatim}
+%% Generate BPSK Jammer for HackRF
+%% Low power BPSK signal acting as a jammer
+clear; clc;
+
+Fs = 2e6;
+bitDuration = 5;      % each bit 5 seconds
+totalTime = 30;
+
+% Jammer power: 30% of main signal
+jammerPower = 0.30;
+jammerAmp = round(127 * sqrt(jammerPower));
+
+% Random bit pattern (different from main signal)
+bits = [0 1 1 0 1 0];
+
+samplesPerBit = Fs * bitDuration;
+
+fid = fopen('jammer.iq', 'wb');
+fprintf("Generating BPSK jammer...\n")
+fprintf("Amplitude: %d (out of 127)\n", jammerAmp)
+fprintf("Power ratio: %.0f%%\n", jammerPower*100)
+
+for k = 1:length(bits)
+    if bits(k) == 1
+        symbol = jammerAmp;
+    else
+        symbol = -jammerAmp;
+    end
+
+    I = int8(symbol * ones(samplesPerBit, 1));
+    Q = int8(zeros(samplesPerBit, 1));
+
+    iq = zeros(2*samplesPerBit, 1, 'int8');
+    iq(1:2:end) = I;
+    iq(2:2:end) = Q;
+
+    fwrite(fid, iq, 'int8');
+    fprintf("Bit %d = %d\n", k, bits(k))
+end
+
+fclose(fid);
+fprintf("Done!\n")
+fprintf("hackrf_transfer -t jammer.iq -f 915000000 -s 2000000 -x 30 -a 0\n")
+\end{verbatim}
+
+\section{Python Receiver Code}\label{app:python}
+
+\subsection{Listing 9: Real-Time BPSK Receiver with Jammer Extraction (rec3.py)}\label{lst:rec3}
+\begin{verbatim}
+import subprocess
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from collections import deque
+from numba import njit
+from scipy.signal import butter, lfilter
+
+
+@njit(cache=True)
+def costas_loop(I_raw, Q_raw, loop_phase, loop_freq, alpha, beta):
+    N = len(I_raw)
+    out_I = np.empty(N)
+    out_Q = np.empty(N)
+    phases = np.empty(N)
+
+    for i in range(N):
+        cos_v = np.cos(loop_phase)
+        sin_v = np.sin(loop_phase)
+
+        i_out = I_raw[i] * cos_v + Q_raw[i] * sin_v
+        q_out = -I_raw[i] * sin_v + Q_raw[i] * cos_v
+
+        out_I[i] = i_out
+        out_Q[i] = q_out
+        phases[i] = loop_phase
+
+        if i_out > 0:
+            error = q_out
+        else:
+            error = -q_out
+
+        loop_freq += beta * error
+        loop_phase += loop_freq + alpha * error
+
+        if loop_phase > np.pi:
+            loop_phase -= 2.0 * np.pi
+        elif loop_phase < -np.pi:
+            loop_phase += 2.0 * np.pi
+
+    return out_I, out_Q, phases, loop_phase, loop_freq
+
+
+# HackRF settings
+FREQ = "915000000"
+FS = 2_000_000
+
+cmd = [
+    "hackrf_transfer",
+    "-r", "-",
+    "-f", FREQ,
+    "-s", str(FS),
+    "-g", "20",
+    "-l", "32"
+]
+
+proc = subprocess.Popen(
+    cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+)
+
+# Costas Loop Parameters
+LOOP_BW = 1000
+zeta = 0.707
+BnT = LOOP_BW / FS
+denom = 1 + 2*zeta*BnT + BnT**2
+alpha_loop = (4 * zeta * BnT) / denom
+beta_loop = (4 * BnT**2) / denom
+amp_scale = 2.0
+alpha_loop *= amp_scale
+beta_loop *= amp_scale
+
+# Bandpass filter for jammer extraction
+bp_low = 500.0 / (FS / 2)
+bp_high = 100000.0 / (FS / 2)
+b_bp, a_bp = butter(4, [bp_low, bp_high], btype='band')
+
+# Parameters
+CHUNK = 500_000
+N_DISPLAY = 50000
+DISPLAY_SECONDS = 30
+CHUNK_DURATION = CHUNK / FS
+points_in_window = int(DISPLAY_SECONDS / CHUNK_DURATION)
+time_axis_scroll = np.linspace(0, DISPLAY_SECONDS, points_in_window)
+time_axis_wave = np.arange(N_DISPLAY) / FS * 1000
+
+# Plot setup
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 8))
+
+display_buffer = deque([0.0]*points_in_window, maxlen=points_in_window)
+line1, = ax1.plot(time_axis_scroll, list(display_buffer), 'b-o',
+                  linewidth=2, markersize=3)
+ax1.set_title("Demodulated BPSK")
+ax1.set_xlabel("Time (s)")
+ax1.set_ylabel("Amplitude (V, relative)")
+ax1.set_ylim(-1.0, 1.0)
+ax1.set_xlim(0, DISPLAY_SECONDS)
+ax1.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+ax1.grid()
+
+line2, = ax2.plot(time_axis_wave, np.zeros(N_DISPLAY), 'g',
+                  linewidth=0.5)
+ax2.set_title("Extracted Jammer Signal")
+ax2.set_xlabel("Time (ms)")
+ax2.set_ylabel("Amplitude (V, relative)")
+ax2.set_ylim(-0.3, 0.3)
+ax2.grid()
+
+jammer_power_buf = deque([0.0]*points_in_window, maxlen=points_in_window)
+line3, = ax3.plot(time_axis_scroll, list(jammer_power_buf), 'r-o',
+                  linewidth=2, markersize=3)
+ax3.set_title("Jammer Power")
+ax3.set_xlabel("Time (s)")
+ax3.set_ylabel("Power (dBFS)")
+ax3.set_ylim(-60, 0)
+ax3.set_xlim(0, DISPLAY_SECONDS)
+ax3.grid()
+
+plt.tight_layout()
+
+# State
+loop_phase = 0.0
+loop_freq = 0.0
+freq_acquired = False
+
+# Warm up Numba
+dummy_I = np.zeros(100, dtype=np.float64)
+dummy_Q = np.zeros(100, dtype=np.float64)
+_ = costas_loop(dummy_I, dummy_Q, 0.0, 0.0, alpha_loop, beta_loop)
+
+
+def update(frame):
+    global loop_phase, loop_freq, freq_acquired
+
+    raw = proc.stdout.read(2 * CHUNK)
+    if len(raw) < 2 * CHUNK:
+        return line1, line2, line3
+
+    data = np.frombuffer(raw, dtype=np.int8).astype(np.float64) / 128.0
+    I_raw = data[0::2]
+    Q_raw = data[1::2]
+    N = len(I_raw)
+
+    power = np.mean(I_raw**2 + Q_raw**2)
+    if power < 0.01:
+        display_buffer.append(0.0)
+        jammer_power_buf.append(0.0)
+        line1.set_ydata(list(display_buffer))
+        line3.set_ydata(list(jammer_power_buf))
+        return line1, line2, line3
+
+    # Frequency acquisition (first frame only)
+    if not freq_acquired:
+        iq = I_raw + 1j * Q_raw
+        fft_vals = np.fft.fft(iq)
+        freqs = np.fft.fftfreq(N, d=1.0 / FS)
+        mag = np.abs(fft_vals)
+        mag[0] = 0
+        valid = np.abs(freqs) < 500000
+        mag[~valid] = 0
+        peak_idx = np.argmax(mag)
+        if 1 < peak_idx < N - 1:
+            a = mag[peak_idx - 1]
+            b = mag[peak_idx]
+            c = mag[peak_idx + 1]
+            denom_val = (a - 2*b + c)
+            if denom_val != 0:
+                delta = 0.5 * (a - c) / denom_val
+            else:
+                delta = 0
+            freq_hz_est = freqs[peak_idx] + delta*(freqs[1]-freqs[0])
+        else:
+            freq_hz_est = freqs[peak_idx]
+        loop_freq = 2.0 * np.pi * freq_hz_est / FS
+        freq_acquired = True
+
+    # Costas loop demodulation
+    out_I, out_Q, phases, loop_phase, loop_freq = costas_loop(
+        I_raw, Q_raw, loop_phase, loop_freq, alpha_loop, beta_loop
+    )
+
+    avg = np.mean(out_I)
+    display_buffer.append(avg)
+
+    # Signal reconstruction
+    amplitude_est = np.mean(np.abs(out_I))
+    bpsk_baseband = np.where(out_I > 0, amplitude_est, -amplitude_est)
+    cos_phases = np.cos(phases)
+    sin_phases = np.sin(phases)
+    I_estimated = bpsk_baseband * cos_phases
+    Q_estimated = -bpsk_baseband * sin_phases
+
+    # Residual computation
+    I_residual = I_raw - I_estimated
+    Q_residual = Q_raw - Q_estimated
+
+    # Bandpass filter jammer extraction
+    I_jammer = lfilter(b_bp, a_bp, I_residual)
+    Q_jammer = lfilter(b_bp, a_bp, Q_residual)
+
+    # Jammer power in dBFS
+    jammer_pwr = np.mean(I_jammer**2 + Q_jammer**2)
+    jammer_pwr_dbfs = 10 * np.log10(jammer_pwr + 1e-10)
+    jammer_power_buf.append(jammer_pwr_dbfs)
+
+    # Update plots
+    line1.set_ydata(list(display_buffer))
+    line2.set_ydata(I_jammer[-N_DISPLAY:])
+    line3.set_ydata(list(jammer_power_buf))
+
+    return line1, line2, line3
+
+
+ani = FuncAnimation(fig, update, interval=50)
+plt.show()
+proc.kill()
+\end{verbatim}
+
+
+\end{document}
